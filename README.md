@@ -22,3 +22,10 @@ To make sure if your `MPI` is enabled, just run:
 import torch
 torch.distributed.init_process_group(backend='mpi')
 ```
+
+After this, we also need to have `TorchVison` built from source by running following commands:
+```
+git clone https://github.com/pytorch/vision.git
+source anaconda[2 or 3]/bin/activate ~/anaconda[2 or 3]
+python vision/setup.py install
+```
