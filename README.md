@@ -8,3 +8,6 @@ implement distributed neural network and straggler kill in Pytorch
 The frist thing you need to to is to remove your current version of `pytorch`, and build it from source (we may not need this later, but for now they're not enable `MPI` automatically in the binary source).
 
 To build pytorch from source, you can follow guidence here (https://github.com/pytorch/pytorch#from-source). But there are a few things you should be careful about.
+
+1. make sure you're in your `conda env` when you run `python setup.py install`, otherwise, pytorch will be built in your system lib directory rather than conda lib directory.
+2. make sure you use CUDA (version >= 7.5), and have cuDNN (version >= 7.0) installed. I have a quick and easy way to do this in this github repo.
