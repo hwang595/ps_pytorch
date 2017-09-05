@@ -11,3 +11,9 @@ To build pytorch from source, you can follow guidence here (https://github.com/p
 
 1. make sure you're in your `conda env` when you run `python setup.py install`, otherwise, pytorch will be built in your system lib directory rather than conda lib directory.
 2. make sure you use CUDA (version >= 7.5), and have cuDNN (version >= 7.0) installed. I have a quick and easy way to do this in this github repo (https://github.com/hwang595/distributed-MXNet). I'm not sure why, even the version specified here is `CUDA 7.5`, but this method will still install `CUDA 8.0` for you. But this dosen't matter.
+
+To make sure if your `MPI` is enabled, just run:
+```
+import torch
+torch.distributed.init_process_group(backend='mpi')
+```
