@@ -40,6 +40,8 @@ class DistributedDataParallel(Module):
         self.output_device = output_device
 
         # Sync params and buffers
+        # broad the model from master(node with rank 0) to all nodes
+        # we can borrow this in our parameter server settings
         for p in self.module.state_dict().values():
             dist.broadcast(p, 0)
 
