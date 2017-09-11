@@ -1,8 +1,11 @@
 import itertools
 import collections
+import time
 
 import numpy as np
 from nn_layer import Layer, LinearLayer, SigmoidLayer, SoftmaxOutputLayer
+
+NUM_LAYERS_SKIP = -1
 
 
 # Define the forward propagation step as a method.
@@ -44,18 +47,25 @@ def backward_step(activations, targets, layers):
     output_grad = None  # The error gradient at the output of the current layer
     # Propagate the error backwards through all the layers.
     #  Use reversed to iterate backwards over the list of layers.
-    for layer in reversed(layers):   
-        Y = activations.pop()  # Get the activations of the last layer on the stack
-        # Compute the error at the output layer.
-        # The output layer error is calculated different then hidden layer error.
-        if output_grad is None:
-            input_grad = layer.get_input_grad(Y, targets)
-        else:  # output_grad is not None (layer is not output layer)
-            input_grad = layer.get_input_grad(Y, output_grad)
-        # Get the input of this layer (activations of the previous layer)
-        X = activations[-1]
-        # Compute the layer parameter gradients used to update the parameters
-        grads = layer.get_params_grad(X, output_grad)
+    for i, layer in enumerate(reversed(layers)):
+        cur_layer_idx = len(layers) - i - 1
+        if cur_layer_idx <= NUM_LAYERS_SKIP:
+            # implement short circuit here
+            if layer.is_fc_layer:
+                grads = [0.0 for _ in range(layer.W.shape[0]*layer.W.shape[1]+layer.W.shape[1])]
+        else:
+            # normal gradient computation     
+            Y = activations.pop()  # Get the activations of the last layer on the stack
+            # Compute the error at the output layer.
+            # The output layer error is calculated different then hidden layer error.
+            if output_grad is None:
+                input_grad = layer.get_input_grad(Y, targets)
+            else:  # output_grad is not None (layer is not output layer)
+                input_grad = layer.get_input_grad(Y, output_grad)
+            # Get the input of this layer (activations of the previous layer)
+            X = activations[-1]
+            # Compute the layer parameter gradients used to update the parameters
+            grads = layer.get_params_grad(X, output_grad)
         param_grads.appendleft(grads)
         # Compute gradient at output of previous layer (input of current layer):
         output_grad = input_grad
@@ -108,22 +118,50 @@ class FC_NN(object):
                 print('{}th layer: {}'.format(i, layer.get_name))
         print
 
-    def train(self, training_set, validation_set):
+    def train(self, training_set, validation_set, debug=False):
         num_batch_per_epoch = training_set.images.shape[0] / self.batch_size
         # start training process
         for i in range(self.max_epochs):
+            epoch_start_time = time.time()
             avg_loss = 0
             for batch_idx in range(num_batch_per_epoch):
+                iter_start_time = time.time()
+                tmp_time_3 = time.time()
                 X_batch, y_batch = training_set.next_batch(batch_size=self.batch_size)
-                logits = forward_step(X_batch, self.module)  # Get the activations
-                minibatch_cost = self.module[-1].get_cost(logits[-1], y_batch)  # Get cost
+                duration_get_data = time.time() - tmp_time_3
 
+                tmp_time_0 = time.time()
+                logits = forward_step(X_batch, self.module)  # Get the activations
+                duration_forward = time.time()-tmp_time_0
+                
+                tmp_time_1 = time.time()
+                minibatch_cost = self.module[-1].get_cost(logits[-1], y_batch)  # Get cost
+                duration_getting_cost = time.time()-tmp_time_1
+
+                time_tmp_2 = time.time()
                 param_grads = backward_step(logits, y_batch, self.module)  # Get the gradients
+                duration_backward = time.time()-time_tmp_2
+
+                tmp_time_4 = time.time()
                 update_params(self.module, param_grads, self.lr)  # Update the parameters
+                duration_update_model = time.time() - tmp_time_4
+
                 avg_loss += minibatch_cost
+
+                if debug:
+                    print("fetch data duration: {}".format(duration_get_data))
+                    print
+                    print("forward duration: {}".format(duration_forward))
+                    print
+                    print("get cost duration: {}".format(duration_getting_cost))
+                    print
+                    print("backward duration: {}".format(duration_backward))
+                    print
+                    print("update duration: {}".format(duration_update_model))
+                    print
                 # print something to check if the model is converging
-                print('Train Epoch: {} [{}/{} ({:.0f}%)], Train_loss: {}'.format(
+                print('Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {}, Time Cost: {}'.format(
                     i, batch_idx * X_batch.shape[0], X_batch.shape[0]*num_batch_per_epoch, 
-                    (100. * (batch_idx * X_batch.shape[0]) / (X_batch.shape[0]*num_batch_per_epoch)), minibatch_cost))
+                    (100. * (batch_idx * X_batch.shape[0]) / (X_batch.shape[0]*num_batch_per_epoch)), minibatch_cost, time.time()-iter_start_time))
             # on the end of one epoch we do some test here:
-            print("Average loss for epoch {}: {}".format(i, avg_loss/num_batch_per_epoch))
+            print("Average loss for epoch {}: {}\tTime cost: {}".format(i, avg_loss/num_batch_per_epoch, time.time()-epoch_start_time))
