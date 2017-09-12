@@ -72,6 +72,54 @@ def backward_step(activations, targets, layers):
     return list(param_grads)  # Return the parameter gradients
 
 
+def backward_step_matrix_version(activations, targets, layers):
+    """
+    Perform the backpropagation step over all the layers and return the parameter gradients.
+    Input:
+        activations: A list of forward step activations where the activation at 
+            each index i+1 corresponds to the activation of layer i in layers. 
+            activations[0] contains the input samples. 
+        targets: The output targets of the output layer.
+        layers: A list of Layers corresponding that generated the outputs in activations.
+    Output:
+        A list of parameter gradients where the gradients at each index corresponds to
+        the parameters gradients of the layer at the same index in layers. 
+    """
+    param_grads = collections.deque()  # List of parameter gradients for each layer
+    
+    output_grad = None  # The error gradient at the output of the current layer
+    # Propagate the error backwards through all the layers.
+    #  Use reversed to iterate backwards over the list of layers.
+    for i, layer in enumerate(reversed(layers)):
+        cur_layer_idx = len(layers) - i - 1
+        if cur_layer_idx <= NUM_LAYERS_SKIP:
+            # implement short circuit here
+            if layer.is_fc_layer:
+                grads = [0.0 for _ in range(layer.W.shape[0]*layer.W.shape[1]+layer.W.shape[1])]
+        else:
+            # normal gradient computation     
+            Y = activations.pop()  # Get the activations of the last layer on the stack
+            # Compute the error at the output layer.
+            # The output layer error is calculated different then hidden layer error.
+            if output_grad is None:
+                input_grad = layer.get_input_grad(Y, targets)
+            else:  # output_grad is not None (layer is not output layer)
+                input_grad = layer.get_input_grad(Y, output_grad)
+            # Get the input of this layer (activations of the previous layer)
+            X = activations[-1]
+            # Compute the layer parameter gradients used to update the parameters
+            grads = layer.get_params_grad(X, output_grad)
+        # we do one extra gradient reshape step here:
+        if layer.is_fc_layer:
+            grads_new = np.array(grads).reshape((layer.get_shape[0]+1, layer.get_shape[1]))
+            param_grads.appendleft(grads_new)
+        else:
+            param_grads.appendleft(grads)
+        # Compute gradient at output of previous layer (input of current layer):
+        output_grad = input_grad
+    return list(param_grads)  # in this way, `param_grads` will be a list which contains grads of numpy ndarray
+
+
 # Define a method to update the parameters
 def update_params(layers, param_grads, learning_rate):
     """
@@ -83,6 +131,14 @@ def update_params(layers, param_grads, learning_rate):
             # The parameter returned by the iterator point to the memory space of
             #  the original layer and can thus be modified inplace.
             param -= learning_rate * grad  # Update each parameter
+
+def update_params_matrix_version(layers, param_grads, learning_rate):
+    '''based the test, the '''
+    for layer_idx, layer in enumerate(layers):
+        if layer.is_fc_layer:
+            shape_tmp = layer.get_shape
+            layer.W -= learning_rate * param_grads[layer_idx][0:shape_tmp[0], :]
+            layer.b -= learning_rate * param_grads[layer_idx][shape_tmp[0], :]
 
 
 class FC_NN(object):
@@ -139,11 +195,11 @@ class FC_NN(object):
                 duration_getting_cost = time.time()-tmp_time_1
 
                 time_tmp_2 = time.time()
-                param_grads = backward_step(logits, y_batch, self.module)  # Get the gradients
+                param_grads = backward_step_matrix_version(logits, y_batch, self.module)  # Get the gradients
                 duration_backward = time.time()-time_tmp_2
 
                 tmp_time_4 = time.time()
-                update_params(self.module, param_grads, self.lr)  # Update the parameters
+                update_params_matrix_version(self.module, param_grads, self.lr)  # Update the parameters
                 duration_update_model = time.time() - tmp_time_4
 
                 avg_loss += minibatch_cost

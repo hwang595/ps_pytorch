@@ -37,6 +37,9 @@ class WorkerFC_NN(FC_NN):
 		assert(self.update_step())
 		assert(self.cur_step == STEP_START_)
 
+		# number of batches in one epoch
+		num_batch_per_epoch = training_set.images.shape[0] / self.batch_size
+
 		first = True
 
 		print("Worker {}: starting training".format(self.rank))
@@ -54,7 +57,22 @@ class WorkerFC_NN(FC_NN):
 			first = False
 			print("Rank of this node: {}, Current step: {}".format(self.rank, self.cur_step))
 			self.async_fetch_weights()
-			#self.test_fetch()
+
+			# start the normal training process
+			for i in range(self.max_epochs):
+				epoch_start_time = time.time()
+				avg_loss = 0
+				for batch_idx in range(num_batch_per_epoch):
+					iter_start_time = time.time()
+
+					X_batch, y_batch = training_set.next_batch(batch_size=self.batch_size)
+
+					logits = forward_step(X_batch, self.module)  # Get the activations
+
+					minibatch_cost = self.module[-1].get_cost(logits[-1], y_batch)  # Get cost
+
+					param_grads = backward_step(logits, y_batch, self.module)  # Get the gradients
+
 
 
 	def sync_fetch_step(self):
