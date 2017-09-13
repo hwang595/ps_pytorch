@@ -5,8 +5,33 @@ from nn.nn import *
 
 STEP_START_ = 1
 
+def backward_step_dist_version(activations, layer, output_grad=None, targets=None):
+	'''
+	this function is basically the same as the `backward_step_matrix_version` function
+	the only difference is that for distributed version, we need to fetch the gradient
+	layer by layer, one we gathered the gradient, we send it to the parameter server
+	'''
+	# each time we update activations again
+	Y = activations.pop()
+
+	# we only pass `targets` for output layer
+	if targets is not None:
+		output_grad = None
+
+	if output_grad is None:
+		input_grad = layer.get_input_grad(Y, targets)	
+	else:
+		input_grad = layer.get_input_grad(Y, output_grad)
+	X = activations[-1]
+	grads = layer.get_params_grad(X, output_grad)
+	if layer.is_fc_layer:
+		grads = np.array(grads).reshape((layer.get_shape[0]+1, layer.get_shape[1]))
+	output_grad = input_grad
+	return grads, output_grad, activations
+
+
 class WorkerFC_NN(FC_NN):
-	def __init__(self, comm, world_size, rank):
+	def __init__(self, comm, world_size, rank, **kwargs):
 		self.comm = comm   # get MPI communicator object
 		self.world_size = world_size # total number of processes
 		self.rank = rank # rank of this Worker
@@ -14,6 +39,13 @@ class WorkerFC_NN(FC_NN):
 		self.cur_step = 0
 		self.next_step = 0 # we will fetch this one from parameter server
 		self.fc_layer_counts = []
+
+		self.batch_size = kwargs['batch_size']
+		self.lr = kwargs['learning_rate']
+		self.max_epochs = kwargs['max_epochs']
+
+		# this one is going to be used to avoid fetch the weights for multiple times
+		self._layer_cur_step = []
 
 	def build_model(self, num_layers, layer_config):
 		layers = []
@@ -24,9 +56,12 @@ class WorkerFC_NN(FC_NN):
 		        elif layer_config['layer'+str(i)]['name'] == 'softmax':
 		            layers.append(SoftmaxOutputLayer())
 		    elif layer_config['layer'+str(i)]['type'] == 'fc':
-		    	self.fc_layer_counts.append(i)
-		        layers.append(LinearLayer(layer_config['layer'+str(i)]['shape'][0], layer_config['layer'+str(i)]['shape'][1], init_mode="default"))
+				self.fc_layer_counts.append(i)
+				# init the layer current step counters:
+				self._layer_cur_step.append(0)
+				layers.append(LinearLayer(layer_config['layer'+str(i)]['shape'][0], layer_config['layer'+str(i)]['shape'][1], init_mode="default"))
 		self.module = layers
+
 		return layers
 
 	def train(self, training_set, validation_set):
@@ -38,7 +73,9 @@ class WorkerFC_NN(FC_NN):
 		assert(self.cur_step == STEP_START_)
 
 		# number of batches in one epoch
+		
 		num_batch_per_epoch = training_set.images.shape[0] / self.batch_size
+		
 
 		first = True
 
@@ -48,6 +85,8 @@ class WorkerFC_NN(FC_NN):
 			# the worker shouldn't know the current global step
 			# except received the message from parameter server
 			self.async_fetch_step()
+
+			# the only way every worker know which step they're currently on is to check the cur step variable
 			updated = self.update_step()
 
 			if (not updated) and (not first):
@@ -56,24 +95,34 @@ class WorkerFC_NN(FC_NN):
 
 			first = False
 			print("Rank of this node: {}, Current step: {}".format(self.rank, self.cur_step))
+
+			# TODO(hwang): return layer request here and do weight before the forward step begins, rather than implement
+			# the wait() in the fetch function
 			self.async_fetch_weights()
-
+			
 			# start the normal training process
-			for i in range(self.max_epochs):
-				epoch_start_time = time.time()
-				avg_loss = 0
-				for batch_idx in range(num_batch_per_epoch):
-					iter_start_time = time.time()
+			X_batch, y_batch = training_set.next_batch(batch_size=self.batch_size)
+			logits = forward_step(X_batch, self.module)  # Get the activations
+			minibatch_cost = self.module[-1].get_cost(logits[-1], y_batch)  # Get cost
 
-					X_batch, y_batch = training_set.next_batch(batch_size=self.batch_size)
-
-					logits = forward_step(X_batch, self.module)  # Get the activations
-
-					minibatch_cost = self.module[-1].get_cost(logits[-1], y_batch)  # Get cost
-
-					param_grads = backward_step(logits, y_batch, self.module)  # Get the gradients
-
-
+			req_send_check = []
+			for layer_idx, layer in enumerate(reversed(self.module)):
+				# gather gradient layer by layer
+				if layer.get_name == "softmax_layer":
+					# indicate that this layer is output layer
+					grads, output_grad, logits = backward_step_dist_version(logits, layer=layer, output_grad=None, targets=y_batch)
+				else:
+					grads, output_grad, logits = backward_step_dist_version(logits, layer=layer, output_grad=output_grad, targets=None)
+				# send the gradients after fetching the gradients
+				
+				if layer.is_fc_layer:
+					# TODO(hwang): need to figure out a more robust way for send tags
+					if len(req_send_check) != 0:
+						# if this layer is the first layer to send gradient, then we don't need to wait for anything
+						# else we need to check that the previous gradient has been sent
+						req_send_check[-1].wait()
+					req_isend = self.comm.Isend([grads, MPI.DOUBLE], dest=0, tag=12+layer_idx)
+					req_send_check.append(req_isend)
 
 	def sync_fetch_step(self):
 		'''fetch the first step from the parameter server'''
@@ -82,6 +131,14 @@ class WorkerFC_NN(FC_NN):
 	def async_fetch_step(self):
 		req = self.comm.irecv(source=0, tag=10)
 		self.next_step = req.wait()
+		'''
+		recv_flag = req.test()
+		
+		if recv_flag:
+			#print("This step: {}".format(self.next_step))
+			self.next_step = req.wait()
+			#print("This step after update: {}".format(self.next_step))
+		'''
 
 	def test_fetch(self):
 		'''a test function, used to test async weight sending and receiving'''
@@ -91,14 +148,27 @@ class WorkerFC_NN(FC_NN):
 
 	def async_fetch_weights(self):
 		request_layers = []
+		# keep in mind that this list saved the mapped layer index
+		layers_to_update = []
 		for layer_idx, layer in enumerate(self.module):
 			if layer.is_fc_layer:
-				req = self.comm.Irecv([layer.recv_buf, MPI.DOUBLE], source=0, tag=11+layer_idx)
-				request_layers.append(req)
+				# do a weird layer index map here:
+				layer_map_idx = self.fc_layer_counts.index(layer_idx)
+				# Check if we have already fetched the weights for this
+	    		# particular step. If so, don't fetch it.
+				if self._layer_cur_step[layer_map_idx] < self.cur_step:
+					layers_to_update.append(layer_map_idx)
+					req = self.comm.Irecv([layer.recv_buf, MPI.DOUBLE], source=0, tag=11+layer_idx)
+					request_layers.append(req)
+
+		assert (len(layers_to_update) == len(request_layers))
 		for req_idx, req_l in enumerate(request_layers):
 			fc_layer_idx = self.fc_layer_counts[req_idx]
-			req_l.wait()
+			req_l.wait() # got the weights
 			weights = self.module[fc_layer_idx].recv_buf
+			# we also need to update the layer cur step here:
+			self._layer_cur_step[layers_to_update[req_idx]] = self.cur_step
+
 			# assign fetched weights to weights of module containers
 			assert (self.module[fc_layer_idx].W.shape == weights[0:self.module[fc_layer_idx].get_shape[0], :].shape)
 			self.module[fc_layer_idx].W = weights[0:self.module[fc_layer_idx].get_shape[0], :]

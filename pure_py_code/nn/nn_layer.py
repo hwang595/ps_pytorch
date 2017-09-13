@@ -83,6 +83,7 @@ class LinearLayer(Layer):
         JW = X.T.dot(output_grad)
         Jb = np.sum(output_grad, axis=0)
         return [g for g in itertools.chain(np.nditer(JW), np.nditer(Jb))]
+        #return np.array([g for g in itertools.chain(np.nditer(JW), np.nditer(Jb))])
     
     def get_input_grad(self, Y, output_grad):
         """Return the gradient at the inputs of this layer."""

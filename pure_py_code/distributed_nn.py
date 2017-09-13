@@ -23,6 +23,7 @@ if __name__ == "__main__":
 
     # fetch dataset
     mnist_data = mnist.read_data_sets(train_dir='./data', reshape=True)
+    kwargs = {'batch_size':128, 'learning_rate':0.1, 'max_epochs':100}
 
     layer_config = {'layer0':{'type':'fc', 'name':'fully_connected', 'shape':(mnist_data.train.images.shape[1], 10)},
                 'layer1':{'type':'activation', 'name':'sigmoid'},
@@ -40,10 +41,10 @@ if __name__ == "__main__":
         master_fc_nn.train(training_set=None, validation_set=None)
         print("Done sending messages to workers!")
     else:
-        worker_fc_nn = WorkerFC_NN(comm=comm, world_size=world_size, rank=rank)
+        worker_fc_nn = WorkerFC_NN(comm=comm, world_size=world_size, rank=rank, **kwargs)
         worker_fc_nn.build_model(num_layers=len(layer_config), layer_config=layer_config)
         print("I am worker: {} in all {} workers, next step: {}".format(worker_fc_nn.rank, worker_fc_nn.world_size-1, worker_fc_nn.next_step))
-        worker_fc_nn.train(training_set=None, validation_set=None)
+        worker_fc_nn.train(training_set=mnist_data.train, validation_set=mnist_data.validation)
         print("Now the next step is: {}".format(worker_fc_nn.next_step))
     '''
     mnist_data = mnist.read_data_sets(train_dir='./data', reshape=True)

@@ -49,6 +49,6 @@ if __name__ == "__main__":
     fc_nn = FC_NN(**kwargs)
     fc_nn.build_model(num_layers=len(layer_config), layer_config=layer_config)
     fc_nn.print_model()  
-    fc_nn.train(training_set=mnist_data.train, validation_set=mnist_data.validation, debug=True)
+    fc_nn.train(training_set=mnist_data.train, validation_set=mnist_data.validation, debug=False)
     
     exit()
