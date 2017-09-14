@@ -50,7 +50,7 @@ if __name__ == "__main__":
                 'layer13':{'type':'activation', 'name':'softmax'}}
 
     if rank == 0:
-        master_fc_nn = SyncReplicasMaster_NN(comm=comm, world_size=world_size, num_grad_to_collect=world_size)
+        master_fc_nn = SyncReplicasMaster_NN(comm=comm, world_size=world_size, num_grad_to_collect=world_size, **kwargs)
         master_fc_nn.build_model(num_layers=len(layer_config), layer_config=layer_config)
         print("I am the master: the world size is {}, cur step: {}".format(master_fc_nn.world_size, master_fc_nn.cur_step))
         master_fc_nn.train(training_set=None, validation_set=None)

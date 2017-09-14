@@ -105,6 +105,10 @@ class LinearLayer(Layer):
         tmp_b = self.b.reshape(1, self.b.shape[0])
         return np.concatenate((self.W, tmp_b), axis=0)
 
+    @property
+    def fetch_wrapped_shape(self):
+        return (self.W.shape[0]+1, self.W.shape[1])
+
 
 class SigmoidLayer(Layer):
     """The logistic layer applies the logistic function to its inputs."""

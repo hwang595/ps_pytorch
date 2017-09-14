@@ -78,7 +78,9 @@ class WorkerFC_NN(FC_NN):
 		# number of batches in one epoch
 		
 		num_batch_per_epoch = training_set.images.shape[0] / self.batch_size
-		
+		batch_idx = -1
+		epoch_idx = 0
+		epoch_avg_loss = 0
 
 		first = True
 
@@ -96,6 +98,8 @@ class WorkerFC_NN(FC_NN):
 				# wait here unitl enter next step
 				continue
 
+			# the real start point of this iteration
+			iter_start_time = time.time()
 			first = False
 			print("Rank of this node: {}, Current step: {}".format(self.rank, self.cur_step))
 
@@ -105,8 +109,20 @@ class WorkerFC_NN(FC_NN):
 			
 			# start the normal training process
 			X_batch, y_batch = training_set.next_batch(batch_size=self.batch_size)
+
+			# manage batch index manually
+			batch_idx += 1
+
+			if batch_idx == num_batch_per_epoch - 1:
+				batch_idx = 0
+				epoch_avg_loss /= num_batch_per_epoch
+				print("Average for epoch {} is {}".format(epoch_idx, epoch_avg_loss))
+				epoch_idx += 1
+				epoch_avg_loss = 0
+
 			logits = forward_step(X_batch, self.module)  # Get the activations
-			minibatch_cost = self.module[-1].get_cost(logits[-1], y_batch)  # Get cost
+			loss = self.module[-1].get_cost(logits[-1], y_batch)  # Get cost
+			epoch_avg_loss += loss
 
 			req_send_check = []
 			for layer_idx, layer in enumerate(reversed(self.module)):
@@ -124,13 +140,13 @@ class WorkerFC_NN(FC_NN):
 					if len(req_send_check) != 0:
 						# if this layer is the first layer to send gradient, then we don't need to wait for anything
 						# else we need to check that the previous gradient has been sent
-						#print("Worker {} Waiting layer {}th grad to send.....".format(self.rank, layer_idx))
-						#print("==========================================================")
 						req_send_check[-1].wait()
-						#print("Done, Worker {} layer {}th".format(self.rank, layer_idx))
-						#print("---------------------------------------------------------")
 					req_isend = self.comm.Isend([grads, MPI.DOUBLE], dest=0, tag=12+mapped_layer_idx)
 					req_send_check.append(req_isend)
+			# on the end of a certain iteration
+			print('Worker: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {}, Time Cost: {}'.format(self.rank,
+                    epoch_idx, batch_idx * X_batch.shape[0], X_batch.shape[0]*num_batch_per_epoch, 
+                    (100. * (batch_idx * X_batch.shape[0]) / (X_batch.shape[0]*num_batch_per_epoch)), loss, time.time()-iter_start_time))
 
 	def sync_fetch_step(self):
 		'''fetch the first step from the parameter server'''
@@ -139,14 +155,6 @@ class WorkerFC_NN(FC_NN):
 	def async_fetch_step(self):
 		req = self.comm.irecv(source=0, tag=10)
 		self.next_step = req.wait()
-		'''
-		recv_flag = req.test()
-		
-		if recv_flag:
-			#print("This step: {}".format(self.next_step))
-			self.next_step = req.wait()
-			#print("This step after update: {}".format(self.next_step))
-		'''
 
 	def test_fetch(self):
 		'''a test function, used to test async weight sending and receiving'''
