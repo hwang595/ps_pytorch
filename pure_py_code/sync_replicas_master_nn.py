@@ -121,8 +121,8 @@ class SyncReplicasMaster_NN(FC_NN):
 
 					self.grad_accumulator.gradient_aggregate_counter[fc_index] += 1
 
-				#print(self.grad_accumulator.gradient_aggregate_counter)
-				#print('-----------------------------------------------------------')
+				print(self.grad_accumulator.gradient_aggregate_counter)
+				print('-----------------------------------------------------------')
 				
 				enough_gradients_received = True
 				for j in self.grad_accumulator.gradient_aggregate_counter:
