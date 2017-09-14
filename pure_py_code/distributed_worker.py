@@ -53,13 +53,16 @@ class WorkerFC_NN(FC_NN):
 		    if layer_config['layer'+str(i)]['type'] == 'activation':
 		        if layer_config['layer'+str(i)]['name'] == 'sigmoid':
 		            layers.append(SigmoidLayer())
+		            layers[-1].layer_index = i
 		        elif layer_config['layer'+str(i)]['name'] == 'softmax':
 		            layers.append(SoftmaxOutputLayer())
+		            layers[-1].layer_index = i
 		    elif layer_config['layer'+str(i)]['type'] == 'fc':
 				self.fc_layer_counts.append(i)
 				# init the layer current step counters:
 				self._layer_cur_step.append(0)
 				layers.append(LinearLayer(layer_config['layer'+str(i)]['shape'][0], layer_config['layer'+str(i)]['shape'][1], init_mode="default"))
+				layers[-1].layer_index = i
 		self.module = layers
 
 		return layers
@@ -116,12 +119,17 @@ class WorkerFC_NN(FC_NN):
 				# send the gradients after fetching the gradients
 				
 				if layer.is_fc_layer:
+					mapped_layer_idx=len(self.module)-1-layer_idx
 					# TODO(hwang): need to figure out a more robust way for send tags
 					if len(req_send_check) != 0:
 						# if this layer is the first layer to send gradient, then we don't need to wait for anything
 						# else we need to check that the previous gradient has been sent
+						#print("Worker {} Waiting layer {}th grad to send.....".format(self.rank, layer_idx))
+						#print("==========================================================")
 						req_send_check[-1].wait()
-					req_isend = self.comm.Isend([grads, MPI.DOUBLE], dest=0, tag=12+layer_idx)
+						#print("Done, Worker {} layer {}th".format(self.rank, layer_idx))
+						#print("---------------------------------------------------------")
+					req_isend = self.comm.Isend([grads, MPI.DOUBLE], dest=0, tag=12+mapped_layer_idx)
 					req_send_check.append(req_isend)
 
 	def sync_fetch_step(self):

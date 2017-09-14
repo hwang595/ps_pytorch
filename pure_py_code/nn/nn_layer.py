@@ -15,6 +15,8 @@ class Layer(object):
     def __init__(self):
         self._name = None
         self._is_fc_layer = None
+        # this member will help to indentify this layer in the whole training process
+        self.layer_index = 0
     
     def get_params_iter(self):
         """Return an iterator over the parameters (if any).
