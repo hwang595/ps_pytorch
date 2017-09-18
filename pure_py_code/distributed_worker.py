@@ -3,7 +3,12 @@ from mpi4py import MPI
 
 from nn.nn import *
 
+import time
+
 STEP_START_ = 1
+
+#TAG_LIST_ = [774, 67, 93, 203, 334, 482, 533]
+TAG_LIST_ = [i*30 for i in range(50000)]
 
 def backward_step_dist_version(activations, layer, output_grad=None, targets=None):
 	'''
@@ -126,6 +131,25 @@ class WorkerFC_NN(FC_NN):
 
 			req_send_check = []
 			for layer_idx, layer in enumerate(reversed(self.module)):
+				# we make workers 1 and 2 quite slow to simulate the straggler
+				if self.rank == 1 or self.rank == 2 or self.rank == 3:
+					time.sleep(0.5)
+				should_kill = False
+				#if self.cur_step > 1:
+				#	print("Entering {}th layer, worker {}".format(len(self.module)-1-layer_idx, self.rank))
+				# use the probe to check killing signal
+				# note that any worker has possibility to be killed
+				for ite in range(10000):
+					status = MPI.Status()
+					#self.comm.Iprobe(MPI.ANY_SOURCE, 13, status)
+					self.comm.Iprobe(0, 77, status)
+					if status.Get_source() == 0:
+						print("Worker {}: I'm the stragger, killing myself!".format(self.rank))
+						tmp = self.comm.recv(source=0, tag=77)
+						should_kill = True
+						break
+				if should_kill:
+					break
 				# gather gradient layer by layer
 				if layer.get_name == "softmax_layer":
 					# indicate that this layer is output layer
@@ -136,17 +160,16 @@ class WorkerFC_NN(FC_NN):
 				
 				if layer.is_fc_layer:
 					mapped_layer_idx=len(self.module)-1-layer_idx
-					# TODO(hwang): need to figure out a more robust way for send tags
 					if len(req_send_check) != 0:
 						# if this layer is the first layer to send gradient, then we don't need to wait for anything
 						# else we need to check that the previous gradient has been sent
 						req_send_check[-1].wait()
-					req_isend = self.comm.Isend([grads, MPI.DOUBLE], dest=0, tag=12+mapped_layer_idx)
+					req_isend = self.comm.Isend([grads, MPI.DOUBLE], dest=0, tag=TAG_LIST_[self.cur_step]+mapped_layer_idx)
 					req_send_check.append(req_isend)
 			# on the end of a certain iteration
 			print('Worker: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {}, Time Cost: {}'.format(self.rank,
-                    epoch_idx, batch_idx * X_batch.shape[0], X_batch.shape[0]*num_batch_per_epoch, 
-                    (100. * (batch_idx * X_batch.shape[0]) / (X_batch.shape[0]*num_batch_per_epoch)), loss, time.time()-iter_start_time))
+                   epoch_idx, batch_idx * X_batch.shape[0], X_batch.shape[0]*num_batch_per_epoch, 
+                   (100. * (batch_idx * X_batch.shape[0]) / (X_batch.shape[0]*num_batch_per_epoch)), loss, time.time()-iter_start_time))
 
 	def sync_fetch_step(self):
 		'''fetch the first step from the parameter server'''

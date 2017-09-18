@@ -9,6 +9,11 @@ STEP_START_ = 1
 
 MAX_NUM_ITERATIONS = 1000000
 
+#MAX_NUM_ITERATIONS = 3
+#TAG_LIST_ = [774, 67, 93, 203, 334, 482, 533]
+# TODO(hwang): this part is messy, try to figure out the requst issue
+TAG_LIST_ = [i*30 for i in range(50000)]
+
 
 def update_params_dist_version(layer, avg_grad, learning_rate):
     '''update the network layer by layer'''
@@ -50,7 +55,6 @@ class GradientAccumulator(object):
 				self.gradient_aggregator[i][j] = np.zeros(self.gradient_aggregator[i][j].shape)
 
 
-
 class SyncReplicasMaster_NN(FC_NN):
 	def __init__(self, comm, world_size, num_grad_to_collect, **kwargs):
 		'''master node here, no rank needed since the rank will always be 0 for master node'''
@@ -64,6 +68,8 @@ class SyncReplicasMaster_NN(FC_NN):
 		self._num_grad_to_collect = self.world_size - 1
 		# used to aggregate tmp gradients, the length is the same as # of fc layer 
 		self._grad_aggregate_buffer = []
+		# represent the `k` in our settings
+		self._should_kill_threshold = 5
 
 	def build_model(self, num_layers, layer_config):
 		layers = []
@@ -94,6 +100,11 @@ class SyncReplicasMaster_NN(FC_NN):
 		for i in range(1, MAX_NUM_ITERATIONS):
 			enough_gradients_received = False
 
+			# workers should be killed at this iteration, this can change from iteration to iteration
+			workers_should_kill = []
+			# in current version we only use this for the 1st layer
+			source_gathered = []
+
 			print("Master node is entering step: {}".format(i))
 			self.async_bcast_step()
 			self.async_bcast_layer_weights()
@@ -106,10 +117,14 @@ class SyncReplicasMaster_NN(FC_NN):
 				status = MPI.Status()
 				MPI.Request.Waitany(requests=gradient_fetch_requests, status=status)
 
-
+				#print(status.source)
+				#print("Layer: {} from Source {}".format(status.tag-12, status.source))
+				#print("//////////////////////////////////////////////////////////////////////////////////////")
 				# TODO(hwang): the layer indices parts are so hacky, definately re-arrange it sooner than later
-				if status.tag-12 in self.fc_layer_counts:
-					ori_layer_index = status.tag-12
+				#if status.tag-TAG_LIST_[self.cur_step]-12 in self.fc_layer_counts:
+				#	ori_layer_index = status.tag-TAG_LIST_[self.cur_step]-12
+				if status.tag-TAG_LIST_[self.cur_step] in self.fc_layer_counts:
+					ori_layer_index = status.tag-TAG_LIST_[self.cur_step]
 					fc_index = self.fc_layer_counts.index(ori_layer_index)
 					received_grad=self.grad_accumulator.gradient_aggregator[fc_index][status.source-1]
 					
@@ -119,14 +134,42 @@ class SyncReplicasMaster_NN(FC_NN):
 					# aggregate the gradient
 					self.aggregate_gradient(gradient=received_grad, layer_idx=fc_index)
 
+					if fc_index == 0:
+						source_gathered.append(status.source)
+
 					self.grad_accumulator.gradient_aggregate_counter[fc_index] += 1
+					
+					################################ straggler killing process ###############################################					
+					if self.grad_accumulator.gradient_aggregate_counter[0] >= self._should_kill_threshold:
+						#print("Start the killing process!")
+						# start the killing process here:
+						# generate the should kill worker list first:
+						print("Start kill the worker")
+						
+						workers_should_kill = list(filter(lambda t: t not in source_gathered, [i for i in range(1, self.world_size)]))
+						print("Should kill list", workers_should_kill)
+						print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+						# this might be a naive solution, but for this version we wait the kill signal to be sent
+						kill_req_list=self.send_kill_signal(should_kill_list=workers_should_kill)
+						# try block sending here
+						#self.send_kill_signal(should_kill_list=workers_should_kill)
+					
+						for req in kill_req_list:
+							req.Wait()
+						print("Sent the killing signal")
+						break
+					
+					##########################################################################################################
 
 				print(self.grad_accumulator.gradient_aggregate_counter)
 				print('-----------------------------------------------------------')
 				
 				enough_gradients_received = True
-				for j in self.grad_accumulator.gradient_aggregate_counter:
-					enough_gradients_received = enough_gradients_received and (j >= self._num_grad_to_collect)
+				for j_idx, j in enumerate(self.grad_accumulator.gradient_aggregate_counter):
+					if j_idx == 0:
+						enough_gradients_received = enough_gradients_received and (j >= self._should_kill_threshold)
+					else:
+						enough_gradients_received = enough_gradients_received and (j >= self._num_grad_to_collect)
 
 			# average gradients and update the mode
 			for i in range(len(self._grad_aggregate_buffer)):
@@ -180,7 +223,7 @@ class SyncReplicasMaster_NN(FC_NN):
 			if layer.is_fc_layer:
 				for k in range(self._num_grad_to_collect):
 					i = self.fc_layer_counts.index(layer_idx)
-					req = self.comm.Irecv([self.grad_accumulator.gradient_aggregator[i][k], MPI.DOUBLE], source=MPI.ANY_SOURCE, tag=12+layer_idx)
+					req = self.comm.Irecv([self.grad_accumulator.gradient_aggregator[i][k], MPI.DOUBLE], source=MPI.ANY_SOURCE, tag=TAG_LIST_[self.cur_step]+layer_idx)
 					gradient_fetch_requests.append(req)
 		return gradient_fetch_requests
 
@@ -191,3 +234,13 @@ class SyncReplicasMaster_NN(FC_NN):
 	def meset_grad_buffer(self):
 		for i in range(len(self._grad_aggregate_buffer)):
 			self._grad_aggregate_buffer[i] = np.zeros(self._grad_aggregate_buffer[i].shape)
+
+	def send_kill_signal(self, should_kill_list):
+		kill_req_list = []
+		for worker_idx in should_kill_list:
+			req=self.comm.isend(-1, dest=worker_idx, tag=77)
+			kill_req_list.append(req)
+		return kill_req_list
+		
+		#for worker_idx in should_kill_list:
+		#	self.comm.send(-1, dest=worker_idx, tag=13)

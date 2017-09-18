@@ -42,12 +42,32 @@ if __name__ == "__main__":
                 'layer5':{'type':'activation', 'name':'sigmoid'},
                 'layer6':{'type':'fc', 'name':'fully_connected', 'shape':(800, 800)},
                 'layer7':{'type':'activation', 'name':'sigmoid'},
-                'layer8':{'type':'fc', 'name':'fully_connected', 'shape':(800, 200)},
+                'layer8':{'type':'fc', 'name':'fully_connected', 'shape':(800, 800)},
                 'layer9':{'type':'activation', 'name':'sigmoid'},
-                'layer10':{'type':'fc', 'name':'fully_connected', 'shape':(200, 100)},
+                'layer10':{'type':'fc', 'name':'fully_connected', 'shape':(800, 800)},
                 'layer11':{'type':'activation', 'name':'sigmoid'},
-                'layer12':{'type':'fc', 'name':'fully_connected', 'shape':(100, mnist_data.train.labels.shape[1])},
-                'layer13':{'type':'activation', 'name':'softmax'}}
+                'layer12':{'type':'fc', 'name':'fully_connected', 'shape':(800, 800)},
+                'layer13':{'type':'activation', 'name':'sigmoid'},
+                'layer14':{'type':'fc', 'name':'fully_connected', 'shape':(800, 800)},
+                'layer15':{'type':'activation', 'name':'sigmoid'},
+                'layer16':{'type':'fc', 'name':'fully_connected', 'shape':(800, 800)},
+                'layer17':{'type':'activation', 'name':'sigmoid'},
+                'layer18':{'type':'fc', 'name':'fully_connected', 'shape':(800, 800)},
+                'layer19':{'type':'activation', 'name':'sigmoid'},
+                'layer20':{'type':'fc', 'name':'fully_connected', 'shape':(800, 800)},
+                'layer21':{'type':'activation', 'name':'sigmoid'},
+                'layer22':{'type':'fc', 'name':'fully_connected', 'shape':(800, 800)},
+                'layer23':{'type':'activation', 'name':'sigmoid'},
+                'layer24':{'type':'fc', 'name':'fully_connected', 'shape':(800, 800)},
+                'layer25':{'type':'activation', 'name':'sigmoid'},
+                'layer26':{'type':'fc', 'name':'fully_connected', 'shape':(800, 800)},
+                'layer27':{'type':'activation', 'name':'sigmoid'},
+                'layer28':{'type':'fc', 'name':'fully_connected', 'shape':(800, 200)},
+                'layer29':{'type':'activation', 'name':'sigmoid'},
+                'layer30':{'type':'fc', 'name':'fully_connected', 'shape':(200, 100)},
+                'layer31':{'type':'activation', 'name':'sigmoid'},
+                'layer32':{'type':'fc', 'name':'fully_connected', 'shape':(100, mnist_data.train.labels.shape[1])},
+                'layer33':{'type':'activation', 'name':'softmax'}}
 
     if rank == 0:
         master_fc_nn = SyncReplicasMaster_NN(comm=comm, world_size=world_size, num_grad_to_collect=world_size, **kwargs)
@@ -61,4 +81,28 @@ if __name__ == "__main__":
         print("I am worker: {} in all {} workers, next step: {}".format(worker_fc_nn.rank, worker_fc_nn.world_size-1, worker_fc_nn.next_step))
         worker_fc_nn.train(training_set=mnist_data.train, validation_set=mnist_data.validation)
         print("Now the next step is: {}".format(worker_fc_nn.next_step))
+    '''
+    mnist_data = mnist.read_data_sets(train_dir='./data', reshape=True)
+
+    kwargs = {'batch_size':128, 'learning_rate':0.1, 'max_epochs':100}
+    layer_config = {'layer0':{'type':'fc', 'name':'fully_connected', 'shape':(mnist_data.train.images.shape[1], 500)},
+                    'layer1':{'type':'activation', 'name':'sigmoid'},
+                    'layer2':{'type':'fc', 'name':'fully_connected', 'shape':(500, 500)},
+                    'layer3':{'type':'activation', 'name':'sigmoid'},
+                    'layer4':{'type':'fc', 'name':'fully_connected', 'shape':(500, 800)},
+                    'layer5':{'type':'activation', 'name':'sigmoid'},
+                    'layer6':{'type':'fc', 'name':'fully_connected', 'shape':(800, 800)},
+                    'layer7':{'type':'activation', 'name':'sigmoid'},
+                    'layer8':{'type':'fc', 'name':'fully_connected', 'shape':(800, 200)},
+                    'layer9':{'type':'activation', 'name':'sigmoid'},
+                    'layer10':{'type':'fc', 'name':'fully_connected', 'shape':(200, 100)},
+                    'layer11':{'type':'activation', 'name':'sigmoid'},
+                    'layer12':{'type':'fc', 'name':'fully_connected', 'shape':(100, mnist_data.train.labels.shape[1])},
+                    'layer13':{'type':'activation', 'name':'softmax'}}
+
+    fc_nn = FC_NN(**kwargs)
+    fc_nn.build_model(num_layers=len(layer_config), layer_config=layer_config)
+    fc_nn.print_model()  
+    fc_nn.train(training_set=mnist_data.train, validation_set=mnist_data.validation, debug=True)
+    '''
     exit()
