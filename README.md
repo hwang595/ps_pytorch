@@ -29,3 +29,9 @@ git clone https://github.com/pytorch/vision.git
 source anaconda[2 or 3]/bin/activate ~/anaconda[2 or 3]
 python vision/setup.py install
 ```
+
+Note:
+To add your `.pem` file using `ssh-add`, run following command first:
+```
+eval `ssh-agent -s`
+```
