@@ -25,34 +25,34 @@ class Cfg(dict):
 
 cfg = Cfg({
     "name" : "Timeout",      # Unique name for this specific configuration
-    "key_name": "MaxLamKeyPair",          # Necessary to ssh into created instances
+    "key_name": "HongyiScript",          # Necessary to ssh into created instances
 
     # Cluster topology
     "n_masters" : 1,                      # Should always be 1
-    "n_workers" : 49,
+    "n_workers" : 1,
     "n_ps" : 1,
     "n_evaluators" : 1,                   # Continually validates the model on the validation data
-    "num_replicas_to_aggregate" : "50",
+    "num_replicas_to_aggregate" : "2",
 
-    "method" : "reserved",
+    "method" : "spot",
 
     # Region speficiation
     "region" : "us-west-2",
     "availability_zone" : "us-west-2b",
 
     # Machine type - instance type configuration.
-    "master_type" : "t2.large",
-    "worker_type" : "t2.large",
-    "ps_type" : "t2.large",
-    "evaluator_type" : "t2.large",
-    "image_id": "ami-2306ba43",
+    "master_type" : "m4.2xlarge",
+    "worker_type" : "m4.2xlarge",
+    "ps_type" : "m4.2xlarge",
+    "evaluator_type" : "m4.2xlarge",
+    "image_id": "ami-35901755",
 
     # Launch specifications
-    "spot_price" : ".12",                 # Has to be a string
+    "spot_price" : ".2",                 # Has to be a string
 
     # SSH configuration
     "ssh_username" : "ubuntu",            # For sshing. E.G: ssh ssh_username@hostname
-    "path_to_keyfile" : "/Users/maxlam/Desktop/School/Fall2016/Research/DistributedSGD/DistributedSGD.pem",
+    "path_to_keyfile" : "/home/hwang/My_Code/AWS/HongyiScript.pem",
 
     # NFS configuration
     # To set up these values, go to Services > ElasticFileSystem > Create new filesystem, and follow the directions.
@@ -72,19 +72,23 @@ cfg = Cfg({
     # Master pre commands are run only by the master
     "master_pre_commands" :
     [
-        "cd DistributedMNIST",
+        "git clone https://github.com/hwang595/pytorch_distributed_nn.git",
+        "cd pytorch_distributed_nn",
         "git fetch && git reset --hard origin/master",
+        "cd distributed_TF",
     ],
 
     # Pre commands are run on every machine before the actual training.
     "pre_commands" :
     [
-        "cd DistributedMNIST",
+        "git clone https://github.com/hwang595/pytorch_distributed_nn.git",
+        "cd pytorch_distributed_nn",
         "git fetch && git reset --hard origin/master",
+        "cd distributed_TF",
     ],
 
     # Model configuration
-    "batch_size" : "128",
+    "batch_size" : "2048",
     "initial_learning_rate" : ".001",
     "learning_rate_decay_factor" : ".98",
     "num_epochs_per_decay" : "1.0",
