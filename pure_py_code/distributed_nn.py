@@ -11,9 +11,13 @@ from mpi4py import MPI
 
 from mnist import mnist
 from nn.nn import FC_NN
-from distributed_worker import *
-from sync_replicas_master_nn import *
+# with killing version
+#from distributed_worker import *
+#from sync_replicas_master_nn import *
 
+# normal version
+from distributed_worker_normal import *
+from sync_replicas_master_nn_normal import *
 
 if __name__ == "__main__":
     # this is only a simple test case
