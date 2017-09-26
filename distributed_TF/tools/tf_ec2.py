@@ -29,10 +29,10 @@ cfg = Cfg({
 
     # Cluster topology
     "n_masters" : 1,                      # Should always be 1
-    "n_workers" : 1,
+    "n_workers" : 7,
     "n_ps" : 1,
     "n_evaluators" : 1,                   # Continually validates the model on the validation data
-    "num_replicas_to_aggregate" : "2",
+    "num_replicas_to_aggregate" : "8",
 
     "method" : "spot",
 
@@ -45,7 +45,7 @@ cfg = Cfg({
     "worker_type" : "m4.2xlarge",
     "ps_type" : "m4.2xlarge",
     "evaluator_type" : "m4.2xlarge",
-    "image_id": "ami-35901755",
+    "image_id": "ami-1bb54a63",
 
     # Launch specifications
     "spot_price" : ".2",                 # Has to be a string
@@ -88,7 +88,7 @@ cfg = Cfg({
     ],
 
     # Model configuration
-    "batch_size" : "2048",
+    "batch_size" : "512",
     "initial_learning_rate" : ".001",
     "learning_rate_decay_factor" : ".98",
     "num_epochs_per_decay" : "1.0",
@@ -113,6 +113,7 @@ cfg = Cfg({
         "--task_id=TASK_ID "
         "--timeline_logging=false "
         "--interval_method=false "
+        "--max_steps=1000 "
         "--worker_times_cdf_method=false "
         "--interval_ms=1200 "
         "--num_replicas_to_aggregate=%(num_replicas_to_aggregate)s "

@@ -19,21 +19,7 @@ import torch.nn.functional as F
 
 from torchvision import datasets, transforms
 
-'''this is a trial example, we use MNIST on LeNet for simple test here'''
-def accuracy(output, target, topk=(1,)):
-    """Computes the precision@k for the specified values of k"""
-    maxk = max(topk)
-    batch_size = target.size(0)
-
-    _, pred = output.topk(maxk, 1, True, True)
-    pred = pred.t()
-    correct = pred.eq(target.view(1, -1).expand_as(pred))
-
-    res = []
-    for k in topk:
-        correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
-        res.append(correct_k.mul_(100.0 / batch_size))
-    return res
+from nn import NN_Trainer, accuracy
 
 def add_fit_args(parser):
     """
@@ -45,7 +31,7 @@ def add_fit_args(parser):
                         help='input batch size for training (default: 64)')
     parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
                         help='input batch size for testing (default: 1000)')
-    parser.add_argument('--epochs', type=int, default=10, metavar='N',
+    parser.add_argument('--epochs', type=int, default=100, metavar='N',
                         help='number of epochs to train (default: 10)')
     parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
                         help='learning rate (default: 0.01)')
@@ -59,26 +45,6 @@ def add_fit_args(parser):
                         help='how many batches to wait before logging training status')
     args = parser.parse_args()
     return args
-
-# communication functions come in here:
-def asynchronous_fetch_weights():
-	''' Fetch all layer weights asynchronously. (from master) '''
-	pass
-
-
-def synchronous_fetch_step():
-	''''synchronously fetch global step from master'''
-	pass
-
-
-def asynchronous_fetch_step_update():
-	'''asynchronously fetch model from master'''
-	pass
-
-
-def asynchronous_fetch_step():
-	'''synchronously fetch global step from master'''
-	pass
 
 # we use LeNet here for our simple case
 class LeNet(nn.Module):
@@ -105,6 +71,7 @@ class LeNet(nn.Module):
         return 'lenet'
 
 class LeNetLearner:
+    """a deprecated class, please don't call this one in any time"""
     def __init__(self, rank, world_size, args):
         self._step_changed = False
         self._update_step = False
@@ -172,10 +139,9 @@ class LeNetLearner:
                 tmp_time_0 = time.time()
                 loss.backward()
 
-                for param_idx, param in enumerate(self.network.parameters()):
-                    print(param_idx, param.grad.data.numpy().shape)
-                    print('===============================================================')
-                exit()
+                if batch_idx == 5:
+                    self.update_state_dict()
+                
                 duration_backward = time.time()-tmp_time_0
 
                 tmp_time_1 = time.time()
@@ -193,9 +159,20 @@ class LeNetLearner:
                     prec1.numpy()[0], 
                     prec5.numpy()[0], time.time()-iter_start_time))
 
+    def update_state_dict(self):
+        """for this test version, we set all params to zeros here"""
+        # we need to build a state dict first
+        new_state_dict = {}
+        for key_name, param in self.network.state_dict().items():
+            tmp_dict = {key_name: torch.FloatTensor(param.size()).zero_()}
+            new_state_dict.update(tmp_dict)
+        self.network.load_state_dict(new_state_dict)
+
 
 if __name__ == "__main__":
-    args = add_fit_args(argparse.ArgumentParser(description='PyTorch MNIST Example'))
+    args = add_fit_args(argparse.ArgumentParser(description='PyTorch MNIST Single Machine Test'))
+
+    kwargs = {'batch_size':args.batch_size, 'learning_rate':args.lr, 'max_epochs':args.epochs, 'momentum':args.momentum}
 
     # load training and test set here:
     train_loader = torch.utils.data.DataLoader(
@@ -211,6 +188,6 @@ if __name__ == "__main__":
                            transforms.Normalize((0.1307,), (0.3081,))
                        ])), batch_size=args.test_batch_size, shuffle=True)
 
-    dist_worker = LeNetLearner(rank=0, world_size=1, args=args)
-    dist_worker.build_model()
-    dist_worker.train(train_loader=train_loader)
+    nn_learner = NN_Trainer(**kwargs)
+    nn_learner.build_model()
+    nn_learner.train(train_loader=train_loader)
