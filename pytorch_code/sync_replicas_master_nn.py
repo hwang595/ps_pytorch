@@ -2,12 +2,17 @@ from __future__ import print_function
 import time
 
 from mpi4py import MPI
+import numpy as np
 
-from nn import NN_Trainer
+from nn_ops import NN_Trainer
+from model_ops.lenet import LeNet
+
+import torch
 
 STEP_START_ = 1
 
-MAX_NUM_ITERATIONS = 1000000
+#MAX_NUM_ITERATIONS = 1000000
+MAX_NUM_ITERATIONS = 100
 
 
 def update_params_dist_version(layer, avg_grad, learning_rate):
@@ -68,16 +73,16 @@ class SyncReplicasMaster_NN(NN_Trainer):
 		self._grad_aggregate_buffer = []
 		self._model_shapes = []
 
-	def build_model(self, num_layers, layer_config):
+	def build_model(self):
 		# build network
-        self.network=LeNet()
-        # TODO(hwang): make sure this is useful
-        self.optimizer = torch.optim.SGD(self.network.parameters(), lr=self.lr, momentum=self.momentum)
-        # assign a gradient accumulator to collect gradients from workers
-        self.grad_accumulator = GradientAccumulator(module=self.network, num_worker=self.world_size-1)
-        self.init_model_shapes()
+		self.network=LeNet()
+		# TODO(hwang): make sure this is useful
+		self.optimizer = torch.optim.SGD(self.network.parameters(), lr=self.lr, momentum=self.momentum)
+		# assign a gradient accumulator to collect gradients from workers
+		self.grad_accumulator = GradientAccumulator(module=self.network, num_worker=self.world_size-1)
+		self.init_model_shapes()
 
-	def train(self, training_set, validation_set):
+	def train(self):
 		# the first step we need to do here is to sync fetch the inital worl_step from the parameter server
 		# we still need to make sure the value we fetched from parameter server is 1
 		# please note that step is start from one here
@@ -99,17 +104,20 @@ class SyncReplicasMaster_NN(NN_Trainer):
 				status = MPI.Status()
 				MPI.Request.Waitany(requests=gradient_fetch_requests, status=status)
 
-				if status.tag-12 in self.grad_accumulator.model_index_range:
-					layer_index = status.tag-12
+				if status.tag-88 in self.grad_accumulator.model_index_range:
+					layer_index = status.tag-88
 					received_grad=self.grad_accumulator.gradient_aggregator[layer_index][status.source-1]
 					
 					# do gradient shape check here
-					assert (received_grad.shape == self._model_shapes)
+					assert (received_grad.shape == self._model_shapes[layer_index])
 
 					# aggregate the gradient
 					self.aggregate_gradient(gradient=received_grad, layer_idx=layer_index)
 
 					self.grad_accumulator.gradient_aggregate_counter[layer_index] += 1
+					
+					#print(self.grad_accumulator.gradient_aggregate_counter)
+					#print('---------------------------------------------------------------------')
 				
 				enough_gradients_received = True
 				for j in self.grad_accumulator.gradient_aggregate_counter:
@@ -119,13 +127,6 @@ class SyncReplicasMaster_NN(NN_Trainer):
 			for i in range(len(self._grad_aggregate_buffer)):
 				self._grad_aggregate_buffer[i] /= self._num_grad_to_collect
 
-			# update the model on parameter sever using averaged model
-			'''
-			for layer_idx, layer in enumerate(self.module):
-				if layer.is_fc_layer:
-					fc_layer_idx = self.fc_layer_counts.index(layer_idx)
-					update_params_dist_version(layer=layer, avg_grad=self._grad_aggregate_buffer[fc_layer_idx], learning_rate=self.lr)
-			'''
 			self.model_update()
 
 			# reset essential elements
@@ -136,6 +137,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 	def init_model_shapes(self):
 		for param_idx, param in enumerate(self.network.parameters()):
 			self._model_shapes.append(param.size())
+			self._grad_aggregate_buffer.append(np.zeros(param.size()))
 
 	def async_bcast_step(self):
 		req_list = []
@@ -149,12 +151,13 @@ class SyncReplicasMaster_NN(NN_Trainer):
 		request_layers = []
 		for layer_idx, layer in enumerate(self.network.parameters()):
 			request_workers = []
-			layer_to_send = layer.data.numpy()
+			#layer_to_send = layer.data.numpy().astype(np.float64)
+			layer_to_send = layer.data.numpy().astype(np.float64)
 			for i in range(self.world_size):
 				if i != 0:
-					if layer.is_fc_layer:
-						req = self.comm.Isend([layer_to_send, MPI.DOUBLE], dest=i, tag=11+layer_idx)
-						request_workers.append(req)
+					#req = self.comm.Isend([layer_to_send, MPI.DOUBLE], dest=i, tag=11+layer_idx)
+					req = self.comm.Isend([layer_to_send, MPI.FLOAT], dest=i, tag=11+layer_idx)
+					request_workers.append(req)
 			request_layers.append(request_workers)
 		# TODO(hwang): check to see if these `wait` calls are necessary here
 		for req_l in request_layers:
@@ -166,7 +169,8 @@ class SyncReplicasMaster_NN(NN_Trainer):
 		gradient_fetch_requests = [] # `graident_fetch_request` should have length of #fc_layer*num_grad_to_collect
 		for layer_idx, layer in enumerate(self.network.parameters()):
 			for k in range(self._num_grad_to_collect):
-				req = self.comm.Irecv([self.grad_accumulator.gradient_aggregator[layer_idx][k], MPI.DOUBLE], source=MPI.ANY_SOURCE, tag=88+layer_idx)
+				#req = self.comm.Irecv([self.grad_accumulator.gradient_aggregator[layer_idx][k], MPI.DOUBLE], source=MPI.ANY_SOURCE, tag=88+layer_idx)
+				req = self.comm.Irecv([self.grad_accumulator.gradient_aggregator[layer_idx][k], MPI.FLOAT], source=MPI.ANY_SOURCE, tag=88+layer_idx)
 				gradient_fetch_requests.append(req)
 		return gradient_fetch_requests
 
@@ -175,13 +179,13 @@ class SyncReplicasMaster_NN(NN_Trainer):
 		self._grad_aggregate_buffer[layer_idx] += gradient
 
 	def model_update(self):
-        """write model fetched from parameter server to local model"""
-        new_state_dict = {}
-        for param_idx,(key_name, param) in enumerate(self.network.state_dict().items()):
-            assert param.size() == self._grad_aggregate_buffer[param_idx].shape
-            tmp_dict = {key_name: self._grad_aggregate_buffer[param_idx].ToTensor()}
-            new_state_dict.update(tmp_dict)
-        self.network.load_state_dict(new_state_dict)
+		"""write model fetched from parameter server to local model"""
+		new_state_dict = {}
+		for param_idx,(key_name, param) in enumerate(self.network.state_dict().items()):
+			assert param.size() == self._grad_aggregate_buffer[param_idx].shape
+			tmp_dict = {key_name: torch.from_numpy(self._grad_aggregate_buffer[param_idx])}
+			new_state_dict.update(tmp_dict)
+		self.network.load_state_dict(new_state_dict)
 
 	def meset_grad_buffer(self):
 		for i in range(len(self._grad_aggregate_buffer)):

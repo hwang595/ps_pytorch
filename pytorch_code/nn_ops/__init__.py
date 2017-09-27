@@ -50,10 +50,11 @@ class NN_Trainer(object):
                 tmp_time_0 = time.time()
                 loss.backward()
 
-                for layer_idx, layer in enumerate(self.network.parameters()):
-                    print(layer.data.numpy())
-                    print("===========================================================")
-
+                for param in self.network.parameters():
+                    # get gradient from layers here
+                    # in this version we fetch weights at once
+                    # remember to change type here, which is essential
+                    grads = param.grad.data.numpy().astype(np.float64)
                 duration_backward = time.time()-tmp_time_0
 
                 tmp_time_1 = time.time()

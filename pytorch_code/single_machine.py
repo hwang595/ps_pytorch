@@ -19,7 +19,8 @@ import torch.nn.functional as F
 
 from torchvision import datasets, transforms
 
-from nn import NN_Trainer, accuracy
+from nn_ops import NN_Trainer, accuracy
+from data_loader_ops.my_data_loader import DataLoader
 
 def add_fit_args(parser):
     """
@@ -27,7 +28,7 @@ def add_fit_args(parser):
     return a parser added with args required by fit
     """
     # Training settings
-    parser.add_argument('--batch-size', type=int, default=2048, metavar='N',
+    parser.add_argument('--batch-size', type=int, default=1024, metavar='N',
                         help='input batch size for training (default: 64)')
     parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
                         help='input batch size for testing (default: 1000)')
@@ -175,6 +176,14 @@ if __name__ == "__main__":
     kwargs = {'batch_size':args.batch_size, 'learning_rate':args.lr, 'max_epochs':args.epochs, 'momentum':args.momentum}
 
     # load training and test set here:
+    
+    training_set = datasets.MNIST('../data', train=True, download=True,
+                   transform=transforms.Compose([
+                       transforms.ToTensor(),
+                       transforms.Normalize((0.1307,), (0.3081,))]))
+    train_loader = DataLoader(training_set, batch_size=args.batch_size, shuffle=True)
+    
+    '''
     train_loader = torch.utils.data.DataLoader(
     datasets.MNIST('../data', train=True, download=True,
                    transform=transforms.Compose([
@@ -187,7 +196,7 @@ if __name__ == "__main__":
                            transforms.ToTensor(),
                            transforms.Normalize((0.1307,), (0.3081,))
                        ])), batch_size=args.test_batch_size, shuffle=True)
-
+    '''
     nn_learner = NN_Trainer(**kwargs)
     nn_learner.build_model()
     nn_learner.train(train_loader=train_loader)

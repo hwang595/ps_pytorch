@@ -2,7 +2,11 @@ from __future__ import print_function
 from mpi4py import MPI
 import numpy as np
 
-from nn import NN_Trainer
+from nn_ops import NN_Trainer
+from model_ops.lenet import LeNet
+
+import torch
+from torch.autograd import Variable
 
 import time
 
@@ -12,10 +16,11 @@ TAG_LIST_ = [i*30 for i in range(50000)]
 
 def prepare_grad_list(params):
     grad_list = []
-    for param_idx, param in enumerate(self.network.parameters()):
+    for param_idx, param in enumerate(params):
         # get gradient from layers here
         # in this version we fetch weights at once
         # remember to change type here, which is essential
+        #grads = param.grad.data.numpy().astype(np.float64)
         grads = param.grad.data.numpy().astype(np.float64)
         grad_list.append((param_idx, grads))
     return grad_list
@@ -44,7 +49,6 @@ class DistributedWorker(NN_Trainer):
         #self.status = MPI.Status()
         self.cur_step = 0
         self.next_step = 0 # we will fetch this one from parameter server
-        self.recv_buf = []
 
         self.batch_size = kwargs['batch_size']
         self.max_epochs = kwargs['max_epochs']
@@ -54,7 +58,7 @@ class DistributedWorker(NN_Trainer):
         # this one is going to be used to avoid fetch the weights for multiple times
         self._layer_cur_step = []
 
-    def build_model(self, num_layers, layer_config):
+    def build_model(self):
         # build network
         self.network=LeNet()
         # set up optimizer
@@ -100,9 +104,9 @@ class DistributedWorker(NN_Trainer):
             # TODO(hwang): return layer request here and do weight before the forward step begins, rather than implement
             # the wait() in the fetch function
             self.async_fetch_weights()
-            
+
             # start the normal training process
-            train_image_batch, train_label_batch = train_loader.__next__()
+            train_image_batch, train_label_batch = train_loader.next_batch()
             X_batch, y_batch = Variable(train_image_batch), Variable(train_label_batch)
 
             # manage batch index manually
@@ -130,18 +134,18 @@ class DistributedWorker(NN_Trainer):
             grad_list = prepare_grad_list(self.network.parameters())
 
             for grad_index_tuple in reversed(grad_list):
-                param_idx = grad_index_pair[0]
-                grads = grad_index_pair[1]
+                param_idx = grad_index_tuple[0]
+                grads = grad_index_tuple[1]
                 if len(req_send_check) != 0:
                     req_send_check[-1].wait()
-
-                req_isend = self._comm.Isend([grads, MPI.DOUBLE], dest=0, tag=88+param_idx)
+                #req_isend = self.comm.Isend([grads, MPI.DOUBLE], dest=0, tag=88+param_idx)
+                req_isend = self.comm.Isend([grads, MPI.FLOAT], dest=0, tag=88+param_idx)
                 req_send_check.append(req_isend)
 
             # on the end of a certain iteration
             print('Worker: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {}, Time Cost: {}'.format(self.rank,
-                    epoch_idx, batch_idx * X_batch.shape[0], X_batch.shape[0]*num_batch_per_epoch, 
-                    (100. * (batch_idx * X_batch.shape[0]) / (X_batch.shape[0]*num_batch_per_epoch)), loss, time.time()-iter_start_time))
+                    epoch_idx, batch_idx * self.batch_size, self.batch_size*num_batch_per_epoch, 
+                    (100. * (batch_idx * self.batch_size) / (self.batch_size*num_batch_per_epoch)), loss.data[0], time.time()-iter_start_time))
 
     def init_recv_buf(self):
         self.model_recv_buf = ModelBuffer(self.network)
@@ -190,10 +194,11 @@ class DistributedWorker(NN_Trainer):
     def async_fetch_weights(self):
         request_layers = []
         layers_to_update = []
-        for layer_idx, layer in enumerate(self.recv_buf):
+        for layer_idx, layer in enumerate(self.model_recv_buf.recv_buf):
             if self.model_recv_buf.layer_cur_step[layer_idx] < self.cur_step:
                 layers_to_update.append(layer_idx)
-                req = self.comm.Irecv([self.model_recv_buf.recv_buf[layer_idx], MPI.DOUBLE], source=0, tag=11+layer_idx)
+                #req = self.comm.Irecv([self.model_recv_buf.recv_buf[layer_idx], MPI.DOUBLE], source=0, tag=11+layer_idx)
+                req = self.comm.Irecv([self.model_recv_buf.recv_buf[layer_idx], MPI.FLOAT], source=0, tag=11+layer_idx)
                 request_layers.append(req)
 
         assert (len(layers_to_update) == len(request_layers))
@@ -203,7 +208,7 @@ class DistributedWorker(NN_Trainer):
             weights = self.model_recv_buf.recv_buf[req_idx]
             weights_to_update.append(weights)
             # we also need to update the layer cur step here:
-            self.self.model_recv_buf.layer_cur_step[req_idx] = self.cur_step
+            self.model_recv_buf.layer_cur_step[req_idx] = self.cur_step
         self.model_update(weights_to_update)    
 
     def update_step(self):
@@ -217,7 +222,7 @@ class DistributedWorker(NN_Trainer):
         new_state_dict = {}
         for param_idx,(key_name, param) in enumerate(self.network.state_dict().items()):
             assert param.size() == weights_to_update[param_idx].shape
-            tmp_dict = {key_name: weights_to_update[param_idx].ToTensor()}
+            tmp_dict = {key_name: torch.from_numpy(weights_to_update[param_idx])}
             new_state_dict.update(tmp_dict)
         self.network.load_state_dict(new_state_dict)
 
