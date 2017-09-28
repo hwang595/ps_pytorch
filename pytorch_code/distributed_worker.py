@@ -127,6 +127,13 @@ class DistributedWorker(NN_Trainer):
             # backward step
             loss.backward()
 
+            #if self.cur_step >= 0:
+            #    for param in self.network.parameters():
+                    #print(param)
+                    #print('==========================================================================')
+            #        print(param.grad.data)
+            #        print('$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$')
+
             # start sending computed gradients to parameter server
             # int this version we send the gradients after all gradients are available
             # TODO(hwang): figure out the killing process in pytorch framework asap

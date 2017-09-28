@@ -55,6 +55,7 @@ class NN_Trainer(object):
                     # in this version we fetch weights at once
                     # remember to change type here, which is essential
                     grads = param.grad.data.numpy().astype(np.float64)
+
                 duration_backward = time.time()-tmp_time_0
 
                 tmp_time_1 = time.time()

@@ -184,6 +184,7 @@ class DataLoaderIter(object):
 
     def __next__(self):
         if self.num_workers == 0:  # same-process loading
+            #TODO(hwang): try to figure out what's happening right here and fix this issue
             indices = next(self.sample_iter)  # may raise StopIteration
             batch = self.collate_fn([self.dataset[i] for i in indices])
             if self.pin_memory:

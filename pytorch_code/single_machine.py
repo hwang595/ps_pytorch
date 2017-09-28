@@ -140,6 +140,10 @@ class LeNetLearner:
                 tmp_time_0 = time.time()
                 loss.backward()
 
+                for params in self.network.parameters():
+                    print(params.grad.data.numpy())
+                    print('**********************************************************')
+
                 if batch_idx == 5:
                     self.update_state_dict()
                 

@@ -12,16 +12,16 @@ import torch
 STEP_START_ = 1
 
 #MAX_NUM_ITERATIONS = 1000000
-MAX_NUM_ITERATIONS = 100
+MAX_NUM_ITERATIONS = 1000
 
 
-def update_params_dist_version(layer, avg_grad, learning_rate):
+def update_params_dist_version(param, avg_grad, learning_rate):
     '''
     update the network layer by layer
     '''
-    shape_tmp = layer.get_shape
-    layer.W -= learning_rate * avg_grad[0:shape_tmp[0], :]
-    layer.b -= learning_rate * avg_grad[shape_tmp[0], :]
+    assert param.shape == avg_grad.shape
+    param -= learning_rate * avg_grad
+    return param
 
 class GradientAccumulator(object):
 	'''a simple class to implement gradient aggregator like the `Conditional Accumulators` in tensorflow'''
@@ -127,7 +127,14 @@ class SyncReplicasMaster_NN(NN_Trainer):
 			for i in range(len(self._grad_aggregate_buffer)):
 				self._grad_aggregate_buffer[i] /= self._num_grad_to_collect
 
-			self.model_update()
+			# update using SGD method
+			tmp_module = []
+			for param_idx, param in enumerate(self.network.parameters()):
+				updated_model=update_params_dist_version(param=param.data.numpy(), avg_grad=self._grad_aggregate_buffer[param_idx], learning_rate=self.lr)
+				tmp_module.append(updated_model)
+
+			# update `state_dict` in pytorch modules
+			self.model_update(tmp_module)
 
 			# reset essential elements
 			self.meset_grad_buffer()
@@ -178,12 +185,12 @@ class SyncReplicasMaster_NN(NN_Trainer):
 		'''keep in mind the gradient here is wrapped gradient, which means it contains `W` and `b`'''
 		self._grad_aggregate_buffer[layer_idx] += gradient
 
-	def model_update(self):
+	def model_update(self, tmp_module):
 		"""write model fetched from parameter server to local model"""
 		new_state_dict = {}
 		for param_idx,(key_name, param) in enumerate(self.network.state_dict().items()):
-			assert param.size() == self._grad_aggregate_buffer[param_idx].shape
-			tmp_dict = {key_name: torch.from_numpy(self._grad_aggregate_buffer[param_idx])}
+			assert param.size() == tmp_module[param_idx].shape
+			tmp_dict = {key_name: torch.from_numpy(tmp_module[param_idx])}
 			new_state_dict.update(tmp_dict)
 		self.network.load_state_dict(new_state_dict)
 
