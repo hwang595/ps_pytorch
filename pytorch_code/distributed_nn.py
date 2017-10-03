@@ -72,7 +72,7 @@ if __name__ == "__main__":
 
     # fetch dataset
     if args.dataset == "MNIST":
-        mnist_data = mnist.read_data_sets(train_dir='./data', reshape=True)
+        mnist_data = mnist.read_data_sets(train_dir='./mnist_data', reshape=True)
         train_set = MNISTDataset(dataset=mnist_data.train, transform=transforms.ToTensor())
     elif args.dataset == "Cifar10":
         cifar10_data = cifar10.read_data_sets(padding_size=0, reshape=True)
