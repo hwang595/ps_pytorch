@@ -7,6 +7,7 @@ import torch
 from torch.autograd import Variable
 
 from model_ops.lenet import LeNet
+from model_ops.resnet import *
 
 '''this is a trial example, we use MNIST on LeNet for simple test here'''
 def accuracy(output, target, topk=(1,)):
@@ -30,12 +31,17 @@ class NN_Trainer(object):
         self.lr = kwargs['learning_rate']
         self.max_epochs = kwargs['max_epochs']
         self.momentum = kwargs['momentum']
+        self.network_config = kwargs['network']
 
     def build_model(self):
         # build network
-        self.network=LeNet()
+        if self.network_config == "LeNet":
+            self.network=LeNet()
+        elif self.network_config == "ResNet":
+            self.network=resnet18()
         # set up optimizer
         self.optimizer = torch.optim.SGD(self.network.parameters(), lr=self.lr, momentum=self.momentum)
+        self.criterion = torch.nn.CrossEntropyLoss()
 
     def train(self, train_loader):
         self.network.train()
@@ -46,10 +52,15 @@ class NN_Trainer(object):
                 iter_start_time = time.time()
                 data, target = Variable(data), Variable(y_batch)
                 self.optimizer.zero_grad()
-                logits, loss = self.network(data, target)
+                logits = self.network(data)
+                loss = self.criterion(logits, target)
                 tmp_time_0 = time.time()
                 loss.backward()
 
+                for key_name, param in self.network.state_dict().items():
+                    print(param)
+                    print("----------------------------------------------------------------")
+                exit()
                 for param in self.network.parameters():
                     # get gradient from layers here
                     # in this version we fetch weights at once

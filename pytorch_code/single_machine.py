@@ -22,13 +22,16 @@ from torchvision import datasets, transforms
 from nn_ops import NN_Trainer, accuracy
 from data_loader_ops.my_data_loader import DataLoader
 
+from cifar10 import cifar10
+from datasets import Cifar10Dataset
+
 def add_fit_args(parser):
     """
     parser : argparse.ArgumentParser
     return a parser added with args required by fit
     """
     # Training settings
-    parser.add_argument('--batch-size', type=int, default=1024, metavar='N',
+    parser.add_argument('--batch-size', type=int, default=128, metavar='N',
                         help='input batch size for training (default: 64)')
     parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
                         help='input batch size for testing (default: 1000)')
@@ -44,6 +47,10 @@ def add_fit_args(parser):
                         help='random seed (default: 1)')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='how many batches to wait before logging training status')
+    parser.add_argument('--network', type=str, default='LeNet', metavar='N',
+                        help='which kind of network we are going to use, support LeNet and ResNet currently')
+    parser.add_argument('--dataset', type=str, default='MNIST', metavar='N',
+                        help='which dataset used in training, MNIST and Cifar10 supported currently')
     args = parser.parse_args()
     return args
 
@@ -177,30 +184,22 @@ class LeNetLearner:
 if __name__ == "__main__":
     args = add_fit_args(argparse.ArgumentParser(description='PyTorch MNIST Single Machine Test'))
 
-    kwargs = {'batch_size':args.batch_size, 'learning_rate':args.lr, 'max_epochs':args.epochs, 'momentum':args.momentum}
+    kwargs = {'batch_size':args.batch_size, 'learning_rate':args.lr, 'max_epochs':args.epochs, 'momentum':args.momentum, 'network':args.network}
 
     # load training and test set here:
-    
-    training_set = datasets.MNIST('../data', train=True, download=True,
+    if args.dataset == "MNIST":
+        training_set = datasets.MNIST('../data', train=True, download=True,
                    transform=transforms.Compose([
                        transforms.ToTensor(),
                        transforms.Normalize((0.1307,), (0.3081,))]))
-    train_loader = DataLoader(training_set, batch_size=args.batch_size, shuffle=True)
-    
-    '''
-    train_loader = torch.utils.data.DataLoader(
-    datasets.MNIST('../data', train=True, download=True,
-                   transform=transforms.Compose([
-                       transforms.ToTensor(),
-                       transforms.Normalize((0.1307,), (0.3081,))
-                   ])), batch_size=args.batch_size, shuffle=True)
+        train_loader = DataLoader(training_set, batch_size=args.batch_size, shuffle=True)
 
-    test_loader = torch.utils.data.DataLoader(
-        datasets.MNIST('../data', train=False, transform=transforms.Compose([
-                           transforms.ToTensor(),
-                           transforms.Normalize((0.1307,), (0.3081,))
-                       ])), batch_size=args.test_batch_size, shuffle=True)
-    '''
+    elif args.dataset == "Cifar10":
+        trainset = datasets.CIFAR10(root='./cifar10_data', train=True,
+                                                download=True, transform=transforms.ToTensor())
+        train_loader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size,
+                                                  shuffle=True)
+
     nn_learner = NN_Trainer(**kwargs)
     nn_learner.build_model()
     nn_learner.train(train_loader=train_loader)
