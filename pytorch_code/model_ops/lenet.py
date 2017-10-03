@@ -11,7 +11,7 @@ class LeNet(nn.Module):
         self.fc1 = nn.Linear(4*4*50, 500)
         self.fc2 = nn.Linear(500, 10)
         self.ceriation = nn.CrossEntropyLoss()
-    def forward(self, x, target):
+    def forward(self, x):
         x = self.conv1(x)
         x = F.max_pool2d(x, 2, 2)
         x = F.relu(x)
@@ -21,7 +21,7 @@ class LeNet(nn.Module):
         x = x.view(-1, 4*4*50)
         x = self.fc1(x)
         x = self.fc2(x)
-        loss = self.ceriation(x, target)
-        return x, loss
+        #loss = self.ceriation(x, target)
+        return x
     def name(self):
         return 'lenet'
