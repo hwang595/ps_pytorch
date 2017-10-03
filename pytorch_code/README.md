@@ -9,3 +9,4 @@ python single_machine.py --dataset=MNIST/Cifar10 --network=LeNet/Resnet --batch-
 ```
 mpirun -n ${NUM_WORKERS} --hostfile=${HOST_DIR} python distributed_nn.py --dataset=MNIST/Cifar10 --network=LeNet/Resnet --batch-size=${BATCH_SIZE}
 ```
+I will write script to make the whole process automated, stay tuned.
