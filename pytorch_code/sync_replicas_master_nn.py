@@ -6,6 +6,7 @@ import numpy as np
 
 from nn_ops import NN_Trainer
 from model_ops.lenet import LeNet
+from model_ops.resnet import *
 
 import torch
 
@@ -28,21 +29,38 @@ class GradientAccumulator(object):
 	def __init__(self, module, num_worker):
 		# we will update this counter dynamically during the training process
 		# the length of this counter should be number of fc layers in the network
+		
+		'''
 		model_length = len(module.state_dict())
 		self.gradient_aggregate_counter = [0] * model_length
 		self.model_index_range = [i for i in range(model_length)]
+		'''
 
 		# we used list to contain gradients of layers
+		self.gradient_aggregate_counter = []
+		self.model_index_range = []
 		self.gradient_aggregator = []
 
-		# TODO(hwang): we do not need to allocate so many space here since we need to aggregate the gradient
-		# into each slot
+
+		# TODO(hwang): we do not need to allocate so many space here since we need
+		# to aggregate the gradient into each slot
+		# for similar reason to worker side, we temporarily change this to the version without batch norm
+		'''
 		for param_idx,(key_name, param) in enumerate(module.state_dict().items()):
 			tmp_aggregator = []
 			for worker_idx in range(num_worker):
 				tmp_aggregator.append(np.zeros((param.size())))
 			# initialize the gradient aggragator
 			self.gradient_aggregator.append(tmp_aggregator)
+		'''
+		for param_idx, param in enumerate(module.parameters()):
+			tmp_aggregator = []
+			for worker_idx in range(num_worker):
+				tmp_aggregator.append(np.zeros((param.size())))
+			# initialize the gradient aggragator
+			self.gradient_aggregator.append(tmp_aggregator)
+			self.gradient_aggregate_counter.append(0)
+			self.model_index_range.append(param_idx)
 
 	def meset_everything(self):
 		self._meset_grad_counter()
@@ -67,6 +85,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 		self.cur_step = STEP_START_
 		self.lr = kwargs['learning_rate']
 		self.momentum = kwargs['momentum']
+		self.network_config = kwargs['network']
 
 		self._num_grad_to_collect = self.world_size - 1
 		# used to aggregate tmp gradients, the length is the same as # of fc layer 
@@ -75,7 +94,10 @@ class SyncReplicasMaster_NN(NN_Trainer):
 
 	def build_model(self):
 		# build network
-		self.network=LeNet()
+		if self.network_config == "LeNet":
+			self.network=LeNet()
+		elif self.network_config == "ResNet":
+			self.network=ResNet18()
 		# TODO(hwang): make sure this is useful
 		self.optimizer = torch.optim.SGD(self.network.parameters(), lr=self.lr, momentum=self.momentum)
 		# assign a gradient accumulator to collect gradients from workers
@@ -134,6 +156,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 				tmp_module.append(updated_model)
 
 			# update `state_dict` in pytorch modules
+			print("Master start to update the model")
 			self.model_update(tmp_module)
 
 			# reset essential elements
@@ -158,12 +181,11 @@ class SyncReplicasMaster_NN(NN_Trainer):
 		request_layers = []
 		for layer_idx, layer in enumerate(self.network.parameters()):
 			request_workers = []
-			#layer_to_send = layer.data.numpy().astype(np.float64)
 			layer_to_send = layer.data.numpy().astype(np.float64)
 			for i in range(self.world_size):
 				if i != 0:
-					#req = self.comm.Isend([layer_to_send, MPI.DOUBLE], dest=i, tag=11+layer_idx)
-					req = self.comm.Isend([layer_to_send, MPI.FLOAT], dest=i, tag=11+layer_idx)
+					req = self.comm.Isend([layer_to_send, MPI.DOUBLE], dest=i, tag=11+layer_idx)
+					#req = self.comm.Isend([layer_to_send, MPI.FLOAT], dest=i, tag=11+layer_idx)
 					request_workers.append(req)
 			request_layers.append(request_workers)
 		# TODO(hwang): check to see if these `wait` calls are necessary here
@@ -176,8 +198,8 @@ class SyncReplicasMaster_NN(NN_Trainer):
 		gradient_fetch_requests = [] # `graident_fetch_request` should have length of #fc_layer*num_grad_to_collect
 		for layer_idx, layer in enumerate(self.network.parameters()):
 			for k in range(self._num_grad_to_collect):
-				#req = self.comm.Irecv([self.grad_accumulator.gradient_aggregator[layer_idx][k], MPI.DOUBLE], source=MPI.ANY_SOURCE, tag=88+layer_idx)
-				req = self.comm.Irecv([self.grad_accumulator.gradient_aggregator[layer_idx][k], MPI.FLOAT], source=MPI.ANY_SOURCE, tag=88+layer_idx)
+				req = self.comm.Irecv([self.grad_accumulator.gradient_aggregator[layer_idx][k], MPI.DOUBLE], source=MPI.ANY_SOURCE, tag=88+layer_idx)
+				#req = self.comm.Irecv([self.grad_accumulator.gradient_aggregator[layer_idx][k], MPI.FLOAT], source=MPI.ANY_SOURCE, tag=88+layer_idx)
 				gradient_fetch_requests.append(req)
 		return gradient_fetch_requests
 
@@ -188,9 +210,15 @@ class SyncReplicasMaster_NN(NN_Trainer):
 	def model_update(self, tmp_module):
 		"""write model fetched from parameter server to local model"""
 		new_state_dict = {}
+		model_counter_ = 0
 		for param_idx,(key_name, param) in enumerate(self.network.state_dict().items()):
-			assert param.size() == tmp_module[param_idx].shape
-			tmp_dict = {key_name: torch.from_numpy(tmp_module[param_idx])}
+			# handle the case that `running_mean` and `running_var` contained in `BatchNorm` layer
+			if "running_mean" in key_name or "running_var" in key_name:
+				tmp_dict = {key_name : param}
+			else:
+				assert param.size() == tmp_module[model_counter_].shape
+				tmp_dict = {key_name: torch.from_numpy(tmp_module[model_counter_])}
+				model_counter_+=1
 			new_state_dict.update(tmp_dict)
 		self.network.load_state_dict(new_state_dict)
 

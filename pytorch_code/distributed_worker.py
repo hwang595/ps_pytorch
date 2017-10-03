@@ -4,6 +4,7 @@ import numpy as np
 
 from nn_ops import NN_Trainer
 from model_ops.lenet import LeNet
+from model_ops.resnet import *
 
 import torch
 from torch.autograd import Variable
@@ -36,7 +37,14 @@ class ModelBuffer(object):
         self.recv_buf = []
         self.layer_cur_step = []
         '''initialize space to receive model from parameter server'''
-        for key_name, param in network.state_dict().items():
+        #for key_name, param in network.state_dict().items():
+        #    self.recv_buf.append(np.zeros(param.size()))
+        #    self.layer_cur_step.append(0)
+
+        # consider we don't want to update the param of `BatchNorm` layer right now
+        # we temporirially deprecate the foregoing version and only update the model
+        # parameters
+        for param_idx, param in enumerate(network.parameters()):
             self.recv_buf.append(np.zeros(param.size()))
             self.layer_cur_step.append(0)
 
@@ -54,15 +62,21 @@ class DistributedWorker(NN_Trainer):
         self.max_epochs = kwargs['max_epochs']
         self.momentum = kwargs['momentum']
         self.lr = kwargs['learning_rate']
+        self.network_config = kwargs['network']
 
         # this one is going to be used to avoid fetch the weights for multiple times
         self._layer_cur_step = []
 
     def build_model(self):
         # build network
-        self.network=LeNet()
+        if self.network_config == "LeNet":
+            self.network=LeNet()
+        elif self.network_config == "ResNet":
+            self.network=ResNet18()
+
         # set up optimizer
         self.optimizer = torch.optim.SGD(self.network.parameters(), lr=self.lr, momentum=self.momentum)
+        self.criterion = nn.CrossEntropyLoss()
         # assign a buffer for receiving models from parameter server
         self.init_recv_buf()
 
@@ -75,7 +89,7 @@ class DistributedWorker(NN_Trainer):
         assert(self.cur_step == STEP_START_)
 
         # number of batches in one epoch
-        num_batch_per_epoch = len(train_loader.dataset) / self.batch_size
+        num_batch_per_epoch = len(train_loader) / self.batch_size
         batch_idx = -1
         epoch_idx = 0
         epoch_avg_loss = 0
@@ -106,8 +120,8 @@ class DistributedWorker(NN_Trainer):
             self.async_fetch_weights()
 
             # start the normal training process
-            train_image_batch, train_label_batch = train_loader.next_batch()
-            X_batch, y_batch = Variable(train_image_batch), Variable(train_label_batch)
+            train_image_batch, train_label_batch = train_loader.next_batch(batch_size=self.batch_size)
+            X_batch, y_batch = Variable(train_image_batch.float()), Variable(train_label_batch.long())
 
             # manage batch index manually
             batch_idx += 1
@@ -121,21 +135,12 @@ class DistributedWorker(NN_Trainer):
                 epoch_avg_loss = 0
 
             # forward step
-            logits, loss = self.network(X_batch, y_batch)
+            logits = self.network(X_batch)
+            loss = self.criterion(logits, y_batch)
             epoch_avg_loss += loss.data[0]
 
             # backward step
             loss.backward()
-
-            #if self.cur_step >= 0:
-            #    for param in self.network.parameters():
-                    #print(param)
-                    #print('==========================================================================')
-            #        print(param.grad.data)
-            #        print('$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$')
-
-            # start sending computed gradients to parameter server
-            # int this version we send the gradients after all gradients are available
             # TODO(hwang): figure out the killing process in pytorch framework asap
             req_send_check = []
             grad_list = prepare_grad_list(self.network.parameters())
@@ -145,8 +150,8 @@ class DistributedWorker(NN_Trainer):
                 grads = grad_index_tuple[1]
                 if len(req_send_check) != 0:
                     req_send_check[-1].wait()
-                #req_isend = self.comm.Isend([grads, MPI.DOUBLE], dest=0, tag=88+param_idx)
-                req_isend = self.comm.Isend([grads, MPI.FLOAT], dest=0, tag=88+param_idx)
+                req_isend = self.comm.Isend([grads, MPI.DOUBLE], dest=0, tag=88+param_idx)
+                #req_isend = self.comm.Isend([grads, MPI.FLOAT], dest=0, tag=88+param_idx)
                 req_send_check.append(req_isend)
 
             # on the end of a certain iteration
@@ -204,8 +209,10 @@ class DistributedWorker(NN_Trainer):
         for layer_idx, layer in enumerate(self.model_recv_buf.recv_buf):
             if self.model_recv_buf.layer_cur_step[layer_idx] < self.cur_step:
                 layers_to_update.append(layer_idx)
-                #req = self.comm.Irecv([self.model_recv_buf.recv_buf[layer_idx], MPI.DOUBLE], source=0, tag=11+layer_idx)
-                req = self.comm.Irecv([self.model_recv_buf.recv_buf[layer_idx], MPI.FLOAT], source=0, tag=11+layer_idx)
+                #print(self.model_recv_buf.recv_buf[layer_idx].shape)
+                #print('----------------------------------------------------------------------------')
+                req = self.comm.Irecv([self.model_recv_buf.recv_buf[layer_idx], MPI.DOUBLE], source=0, tag=11+layer_idx)
+                #req = self.comm.Irecv([self.model_recv_buf.recv_buf[layer_idx], MPI.FLOAT], source=0, tag=11+layer_idx)
                 request_layers.append(req)
 
         assert (len(layers_to_update) == len(request_layers))
@@ -227,9 +234,15 @@ class DistributedWorker(NN_Trainer):
     def model_update(self, weights_to_update):
         """write model fetched from parameter server to local model"""
         new_state_dict = {}
+        model_counter_ = 0
         for param_idx,(key_name, param) in enumerate(self.network.state_dict().items()):
-            assert param.size() == weights_to_update[param_idx].shape
-            tmp_dict = {key_name: torch.from_numpy(weights_to_update[param_idx])}
+            # handle the case that `running_mean` and `running_var` contained in `BatchNorm` layer
+            if "running_mean" in key_name or "running_var" in key_name:
+                tmp_dict={key_name: param}
+            else:
+                assert param.size() == weights_to_update[model_counter_].shape
+                tmp_dict = {key_name: torch.from_numpy(weights_to_update[model_counter_])}
+                model_counter_ += 1
             new_state_dict.update(tmp_dict)
         self.network.load_state_dict(new_state_dict)
 

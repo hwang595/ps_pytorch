@@ -27,13 +27,19 @@ from data_loader_ops.my_data_loader import DataLoader
 from distributed_worker import *
 from sync_replicas_master_nn import *
 
+#for tmp solution
+from mnist import mnist
+from datasets import MNISTDataset
+from cifar10 import cifar10
+from datasets import Cifar10Dataset
+
 def add_fit_args(parser):
     """
     parser : argparse.ArgumentParser
     return a parser added with args required by fit
     """
     # Training settings
-    parser.add_argument('--batch-size', type=int, default=1024, metavar='N',
+    parser.add_argument('--batch-size', type=int, default=128, metavar='N',
                         help='input batch size for training (default: 64)')
     parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
                         help='input batch size for testing (default: 1000)')
@@ -49,6 +55,10 @@ def add_fit_args(parser):
                         help='random seed (default: 1)')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='how many batches to wait before logging training status')
+    parser.add_argument('--network', type=str, default='LeNet', metavar='N',
+                        help='which kind of network we are going to use, support LeNet and ResNet currently')
+    parser.add_argument('--dataset', type=str, default='MNIST', metavar='N',
+                        help='which dataset used in training, MNIST and Cifar10 supported currently')
     args = parser.parse_args()
     return args
 
@@ -61,14 +71,14 @@ if __name__ == "__main__":
     args = add_fit_args(argparse.ArgumentParser(description='PyTorch MNIST Single Machine Test'))
 
     # fetch dataset
-    training_set = datasets.MNIST('../data', train=True, download=True,
-                   transform=transforms.Compose([
-                       transforms.ToTensor(),
-                       transforms.Normalize((0.1307,), (0.3081,))
-                   ]))
-    train_loader = DataLoader(training_set, batch_size=args.batch_size, shuffle=True)
+    if args.dataset == "MNIST":
+        mnist_data = mnist.read_data_sets(train_dir='./data', reshape=True)
+        train_set = MNISTDataset(dataset=mnist_data.train, transform=transforms.ToTensor())
+    elif args.dataset == "Cifar10":
+        cifar10_data = cifar10.read_data_sets(padding_size=0, reshape=True)
+        train_set = Cifar10Dataset(dataset=cifar10_data.train, transform=transforms.ToTensor())
 
-    kwargs = {'batch_size':args.batch_size, 'learning_rate':args.lr, 'max_epochs':args.epochs, 'momentum':args.momentum}
+    kwargs = {'batch_size':args.batch_size, 'learning_rate':args.lr, 'max_epochs':args.epochs, 'momentum':args.momentum, 'network':args.network}
 
     if rank == 0:
         master_fc_nn = SyncReplicasMaster_NN(comm=comm, **kwargs)
@@ -80,5 +90,5 @@ if __name__ == "__main__":
         worker_fc_nn = DistributedWorker(comm=comm, **kwargs)
         worker_fc_nn.build_model()
         print("I am worker: {} in all {} workers, next step: {}".format(worker_fc_nn.rank, worker_fc_nn.world_size-1, worker_fc_nn.next_step))
-        worker_fc_nn.train(train_loader=train_loader)
+        worker_fc_nn.train(train_loader=train_set)
         print("Now the next step is: {}".format(worker_fc_nn.next_step))

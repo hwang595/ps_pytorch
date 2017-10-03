@@ -38,7 +38,7 @@ class NN_Trainer(object):
         if self.network_config == "LeNet":
             self.network=LeNet()
         elif self.network_config == "ResNet":
-            self.network=resnet18()
+            self.network=ResNet18()
         # set up optimizer
         self.optimizer = torch.optim.SGD(self.network.parameters(), lr=self.lr, momentum=self.momentum)
         self.criterion = torch.nn.CrossEntropyLoss()
@@ -57,10 +57,10 @@ class NN_Trainer(object):
                 tmp_time_0 = time.time()
                 loss.backward()
 
-                for key_name, param in self.network.state_dict().items():
-                    print(param)
-                    print("----------------------------------------------------------------")
-                exit()
+                #for key_name, param in self.network.state_dict().items():
+                #    print(param)
+                #    print("----------------------------------------------------------------")
+                #exit()
                 for param in self.network.parameters():
                     # get gradient from layers here
                     # in this version we fetch weights at once
