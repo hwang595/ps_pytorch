@@ -140,7 +140,9 @@ class DistributedWorker(NN_Trainer):
             epoch_avg_loss += loss.data[0]
 
             # backward step
+            backward_start_time = time.time()
             loss.backward()
+            backward_duration = time.time()-backward_start_time
             # TODO(hwang): figure out the killing process in pytorch framework asap
             req_send_check = []
             grad_list = prepare_grad_list(self.network.parameters())
@@ -155,9 +157,9 @@ class DistributedWorker(NN_Trainer):
                 req_send_check.append(req_isend)
 
             # on the end of a certain iteration
-            print('Worker: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {}, Time Cost: {}'.format(self.rank,
+            print('Worker: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {}, Time Cost: {}, Backward Cost: {}'.format(self.rank,
                     epoch_idx, batch_idx * self.batch_size, self.batch_size*num_batch_per_epoch, 
-                    (100. * (batch_idx * self.batch_size) / (self.batch_size*num_batch_per_epoch)), loss.data[0], time.time()-iter_start_time))
+                    (100. * (batch_idx * self.batch_size) / (self.batch_size*num_batch_per_epoch)), loss.data[0], time.time()-iter_start_time, backward_duration))
 
     def init_recv_buf(self):
         self.model_recv_buf = ModelBuffer(self.network)
