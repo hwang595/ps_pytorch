@@ -150,6 +150,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 				for j in self.grad_accumulator.gradient_aggregate_counter:
 					enough_gradients_received = enough_gradients_received and (j >= self._num_grad_to_collect)
 
+			grad_gather_duration = time.time()-grad_gather_start_time
 			print("Master: gradient gather time: {:.4f}".format(grad_gather_duration))
 			# average gradients and update the mode
 			for i in range(len(self._grad_aggregate_buffer)):
