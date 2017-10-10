@@ -93,6 +93,8 @@ class DistributedWorker(NN_Trainer):
         batch_idx = -1
         epoch_idx = 0
         epoch_avg_loss = 0
+        iteration_last_step=0
+        iter_start_time=0
 
         first = True
 
