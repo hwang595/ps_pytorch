@@ -91,6 +91,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 		# used to aggregate tmp gradients, the length is the same as # of fc layer 
 		self._grad_aggregate_buffer = []
 		self._model_shapes = []
+		self._first_grad_received = False
 
 	def build_model(self):
 		# build network
@@ -127,6 +128,10 @@ class SyncReplicasMaster_NN(NN_Trainer):
 				MPI.Request.Waitany(requests=gradient_fetch_requests, status=status)
 
 				if status.tag-88 in self.grad_accumulator.model_index_range:
+					if not self._first_grad_received:
+						self._first_grad_received=True
+						grad_gather_start_time = time.time()
+
 					layer_index = status.tag-88
 					received_grad=self.grad_accumulator.gradient_aggregator[layer_index][status.source-1]
 					
@@ -145,6 +150,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 				for j in self.grad_accumulator.gradient_aggregate_counter:
 					enough_gradients_received = enough_gradients_received and (j >= self._num_grad_to_collect)
 
+			print("Master: gradient gather time: {:.4f}".format(grad_gather_duration))
 			# average gradients and update the mode
 			for i in range(len(self._grad_aggregate_buffer)):
 				self._grad_aggregate_buffer[i] /= self._num_grad_to_collect
