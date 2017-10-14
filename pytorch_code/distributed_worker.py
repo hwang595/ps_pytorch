@@ -165,9 +165,9 @@ class DistributedWorker(NN_Trainer):
                 req_send_check.append(req_isend)
             send_grad_duration = time.time() - send_grad_start_time
             # on the end of a certain iteration
-            print('Worker: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, TCLast: {:.4f}, FetchWeight: {:.4f}, Forward: {:.4f}, Backward: {:.4f}, SendGrad:{}'.format(self.rank,
+            print('Worker: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, FetchWeight: {:.4f}, Forward: {:.4f}, Backward: {:.4f}, SendGrad:{}'.format(self.rank,
                     epoch_idx, batch_idx * self.batch_size, self.batch_size*num_batch_per_epoch, 
-                    (100. * (batch_idx * self.batch_size) / (self.batch_size*num_batch_per_epoch)), loss.data[0], time.time()-iter_start_time, iteration_last_step, fetch_weight_duration, forward_duration, backward_duration, send_grad_duration))
+                    (100. * (batch_idx * self.batch_size) / (self.batch_size*num_batch_per_epoch)), loss.data[0], time.time()-iter_start_time, fetch_weight_duration, forward_duration, backward_duration, send_grad_duration))
 
     def init_recv_buf(self):
         self.model_recv_buf = ModelBuffer(self.network)
