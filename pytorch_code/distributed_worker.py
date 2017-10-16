@@ -226,7 +226,6 @@ class DistributedWorker(NN_Trainer):
                 #request_layers.append(req)
                 self.comm.Bcast([self.model_recv_buf.recv_buf[layer_idx], MPI.DOUBLE], root=0)
         weights_to_update = []
-
         for req_idx, layer_idx in enumerate(layers_to_update):
             weights = self.model_recv_buf.recv_buf[req_idx]
             weights_to_update.append(weights)

@@ -14,7 +14,7 @@ import torch
 STEP_START_ = 1
 
 #MAX_NUM_ITERATIONS = 1000000
-MAX_NUM_ITERATIONS = 1000
+MAX_NUM_ITERATIONS = 20
 
 
 def update_params_dist_version(param, avg_grad, learning_rate):
@@ -118,6 +118,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 			enough_gradients_received = False
 
 			print("Master node is entering step: {}".format(i))
+
 			self.async_bcast_step()
 			self.async_bcast_layer_weights()
 			
@@ -207,10 +208,10 @@ class SyncReplicasMaster_NN(NN_Trainer):
 		for layer_idx, layer in enumerate(self.network.parameters()):
 			request_workers = []
 			layer_to_send = layer.data.numpy().astype(np.float64)
-			for i in range(self.world_size):
-				if i != 0:
-					# try to see if collective communication is better here:
-					self.comm.Bcast([layer_to_send, MPI.DOUBLE], root=0)
+			#for i in range(self.world_size):
+			#	if i != 0:
+			# try to see if collective communication is better here:
+			self.comm.Bcast([layer_to_send, MPI.DOUBLE], root=0)
 			#request_layers.append(request_workers)
 		# TODO(hwang): check to see if these `wait` calls are necessary here
 		#for req_l in request_layers:
