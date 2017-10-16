@@ -3,13 +3,14 @@ from mpi4py import MPI
 import numpy as np
 
 from nn_ops import NN_Trainer
-from model_ops.lenet import LeNet
+from model_ops.lenet import LeNet, LeNetSplit
 from model_ops.resnet import *
 
 import torch
 from torch.autograd import Variable
 
 import time
+import copy
 
 STEP_START_ = 1
 
@@ -70,7 +71,7 @@ class DistributedWorker(NN_Trainer):
     def build_model(self):
         # build network
         if self.network_config == "LeNet":
-            self.network=LeNet()
+            self.network=LeNetSplit()
         elif self.network_config == "ResNet":
             self.network=ResNet18()
 
@@ -79,6 +80,7 @@ class DistributedWorker(NN_Trainer):
         self.criterion = nn.CrossEntropyLoss()
         # assign a buffer for receiving models from parameter server
         self.init_recv_buf()
+        self._param_idx = len(self.network.full_modules)*2-1
 
     def train(self, train_loader):
         # the first step we need to do here is to sync fetch the inital worl_step from the parameter server
@@ -112,7 +114,7 @@ class DistributedWorker(NN_Trainer):
                 # wait here unitl enter next step
                 continue
 
-                        # the real start point of this iteration
+            # the real start point of this iteration
             iteration_last_step = time.time() - iter_start_time
             iter_start_time = time.time()
             first = False
@@ -142,18 +144,32 @@ class DistributedWorker(NN_Trainer):
             # forward step
             forward_start_time = time.time()
             logits = self.network(X_batch)
-            loss = self.criterion(logits, y_batch)
+            logits_1 = Variable(logits.data, requires_grad=True)
+
+            loss = self.criterion(logits_1, y_batch)
+
             epoch_avg_loss += loss.data[0]
             forward_duration = time.time()-forward_start_time
 
             # backward step
             backward_start_time = time.time()
             loss.backward()
+            # we can send the grad of this very first layer to parameter server right here before
+            # the chain rule is begining
+            req_send_check = []
+            init_grad_data = logits_1.grad.data.numpy()
+            init_grad_data = np.sum(init_grad_data, axis=0).astype(np.float64)
+            # send grad to parameter server
+            req_isend = self.comm.Isend([init_grad_data, MPI.DOUBLE], dest=0, tag=88+self._param_idx)
+            req_send_check.append(req_isend)
+            
+            self.network.backward(logits_1.grad, communicator=self.comm, req_send_check=req_send_check)
             backward_duration = time.time()-backward_start_time
             # TODO(hwang): figure out the killing process in pytorch framework asap
+            ###################################################################################
+            '''
             req_send_check = []
             grad_list = prepare_grad_list(self.network.parameters())
-
             send_grad_start_time = time.time()
             for grad_index_tuple in reversed(grad_list):
                 param_idx = grad_index_tuple[0]
@@ -161,13 +177,15 @@ class DistributedWorker(NN_Trainer):
                 if len(req_send_check) != 0:
                     req_send_check[-1].wait()
                 req_isend = self.comm.Isend([grads, MPI.DOUBLE], dest=0, tag=88+param_idx)
-                #req_isend = self.comm.Isend([grads, MPI.FLOAT], dest=0, tag=88+param_idx)
                 req_send_check.append(req_isend)
             send_grad_duration = time.time() - send_grad_start_time
+            '''
+            ###################################################################################
+
             # on the end of a certain iteration
-            print('Worker: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, FetchWeight: {:.4f}, Forward: {:.4f}, Backward: {:.4f}, SendGrad:{}'.format(self.rank,
+            print('Worker: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, TCLast: {:.4f}, FetchWeight: {:.4f}, Forward: {:.4f}, Backward: {:.4f}'.format(self.rank,
                     epoch_idx, batch_idx * self.batch_size, self.batch_size*num_batch_per_epoch, 
-                    (100. * (batch_idx * self.batch_size) / (self.batch_size*num_batch_per_epoch)), loss.data[0], time.time()-iter_start_time, fetch_weight_duration, forward_duration, backward_duration, send_grad_duration))
+                    (100. * (batch_idx * self.batch_size) / (self.batch_size*num_batch_per_epoch)), loss.data[0], time.time()-iter_start_time, iteration_last_step, fetch_weight_duration, forward_duration, backward_duration))
 
     def init_recv_buf(self):
         self.model_recv_buf = ModelBuffer(self.network)
@@ -179,39 +197,6 @@ class DistributedWorker(NN_Trainer):
     def async_fetch_step(self):
         req = self.comm.irecv(source=0, tag=10)
         self.next_step = req.wait()
-
-    def async_fetch_weights_old(self):
-        '''
-        this is the original MPI code, deprecated
-        TODO(hwang): remember to remove it after testing
-        '''
-        request_layers = []
-        # keep in mind that this list saved the mapped layer index
-        layers_to_update = []
-        for layer_idx, layer in enumerate(self.module):
-            if layer.is_fc_layer:
-                # do a weird layer index map here:
-                layer_map_idx = self.fc_layer_counts.index(layer_idx)
-                # Check if we have already fetched the weights for this
-                # particular step. If so, don't fetch it.
-                if self._layer_cur_step[layer_map_idx] < self.cur_step:
-                    layers_to_update.append(layer_map_idx)
-                    req = self.comm.Irecv([layer.recv_buf, MPI.DOUBLE], source=0, tag=11+layer_idx)
-                    request_layers.append(req)
-
-        assert (len(layers_to_update) == len(request_layers))
-        for req_idx, req_l in enumerate(request_layers):
-            fc_layer_idx = self.fc_layer_counts[req_idx]
-            req_l.wait() # got the weights
-            weights = self.module[fc_layer_idx].recv_buf
-            # we also need to update the layer cur step here:
-            self._layer_cur_step[layers_to_update[req_idx]] = self.cur_step
-
-            # assign fetched weights to weights of module containers
-            assert (self.module[fc_layer_idx].W.shape == weights[0:self.module[fc_layer_idx].get_shape[0], :].shape)
-            self.module[fc_layer_idx].W = weights[0:self.module[fc_layer_idx].get_shape[0], :]
-            assert (self.module[fc_layer_idx].b.shape == weights[self.module[fc_layer_idx].get_shape[0], :].shape)
-            self.module[fc_layer_idx].b = weights[self.module[fc_layer_idx].get_shape[0], :]
 
     def async_fetch_weights(self):
         request_layers = []
@@ -243,7 +228,8 @@ class DistributedWorker(NN_Trainer):
 
     def model_update(self, weights_to_update):
         """write model fetched from parameter server to local model"""
-        new_state_dict = {}
+        #new_state_dict = {}
+        new_state_dict=copy.deepcopy(self.network.state_dict())
         model_counter_ = 0
         for param_idx,(key_name, param) in enumerate(self.network.state_dict().items()):
             # handle the case that `running_mean` and `running_var` contained in `BatchNorm` layer
@@ -251,9 +237,13 @@ class DistributedWorker(NN_Trainer):
                 tmp_dict={key_name: param}
             else:
                 assert param.size() == weights_to_update[model_counter_].shape
-                tmp_dict = {key_name: torch.from_numpy(weights_to_update[model_counter_])}
+                #tmp_dict = {key_name: torch.from_numpy(weights_to_update[model_counter_])}
+                new_state_dict[key_name] = torch.from_numpy(weights_to_update[model_counter_])
                 model_counter_ += 1
-            new_state_dict.update(tmp_dict)
+            #new_state_dict.update(tmp_dict)
+            # TODO(hwang): this is not a stable solution, try to figure out a better one
+            if model_counter_ == len(weights_to_update):
+                break
         self.network.load_state_dict(new_state_dict)
 
 if __name__ == "__main__":
