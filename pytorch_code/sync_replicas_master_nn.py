@@ -1,11 +1,12 @@
 from __future__ import print_function
 import time
+import copy
 
 from mpi4py import MPI
 import numpy as np
 
 from nn_ops import NN_Trainer
-from model_ops.lenet import LeNet
+from model_ops.lenet import LeNet, LeNetSplit
 from model_ops.resnet import *
 
 import torch
@@ -96,7 +97,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 	def build_model(self):
 		# build network
 		if self.network_config == "LeNet":
-			self.network=LeNet()
+			self.network=LeNetSplit()
 		elif self.network_config == "ResNet":
 			self.network=ResNet18()
 		# TODO(hwang): make sure this is useful
@@ -113,6 +114,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 
 		# fake test here:
 		for i in range(1, MAX_NUM_ITERATIONS):
+			self._first_grad_received = False
 			enough_gradients_received = False
 
 			print("Master node is entering step: {}".format(i))
@@ -216,7 +218,8 @@ class SyncReplicasMaster_NN(NN_Trainer):
 
 	def model_update(self, tmp_module):
 		"""write model fetched from parameter server to local model"""
-		new_state_dict = {}
+		#new_state_dict = {}
+		new_state_dict=copy.deepcopy(self.network.state_dict())
 		model_counter_ = 0
 		for param_idx,(key_name, param) in enumerate(self.network.state_dict().items()):
 			# handle the case that `running_mean` and `running_var` contained in `BatchNorm` layer
@@ -224,9 +227,13 @@ class SyncReplicasMaster_NN(NN_Trainer):
 				tmp_dict = {key_name : param}
 			else:
 				assert param.size() == tmp_module[model_counter_].shape
-				tmp_dict = {key_name: torch.from_numpy(tmp_module[model_counter_])}
+				#tmp_dict = {key_name: torch.from_numpy(tmp_module[model_counter_])}
+				new_state_dict[key_name] = torch.from_numpy(tmp_module[model_counter_])
 				model_counter_+=1
-			new_state_dict.update(tmp_dict)
+			#new_state_dict.update(tmp_dict)
+			# TODO(hwang): this is not a stable solution, try to figure out a better one
+			if model_counter_ == len(tmp_module):
+				break
 		self.network.load_state_dict(new_state_dict)
 
 	def meset_grad_buffer(self):

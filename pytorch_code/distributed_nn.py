@@ -1,94 +1,255 @@
 from __future__ import print_function
-
-import sys
-import math
-import threading
-import argparse
-import time
-
-import numpy as np
 from mpi4py import MPI
+import numpy as np
+
+from nn_ops import NN_Trainer
+from model_ops.lenet import LeNet, LeNetSplit
+from model_ops.resnet import *
 
 import torch
 from torch.autograd import Variable
-from torch import nn
-from distributed_functions.distributed_backward import backward
-from torch.nn.parallel.replicate import replicate
-from torch.nn.parallel.scatter_gather import scatter_kwargs, gather
-from torch.nn.parallel.parallel_apply import parallel_apply
-import torch.nn.functional as F
 
-from torchvision import datasets, transforms
+import time
+import copy
 
-from nn_ops import NN_Trainer, accuracy
-from data_loader_ops.my_data_loader import DataLoader
+STEP_START_ = 1
 
-# normal version
-from distributed_worker import *
-from sync_replicas_master_nn import *
+TAG_LIST_ = [i*30 for i in range(50000)]
 
-#for tmp solution
-from mnist import mnist
-from datasets import MNISTDataset
-from cifar10 import cifar10
-from datasets import Cifar10Dataset
+def prepare_grad_list(params):
+    grad_list = []
+    for param_idx, param in enumerate(params):
+        # get gradient from layers here
+        # in this version we fetch weights at once
+        # remember to change type here, which is essential
+        #grads = param.grad.data.numpy().astype(np.float64)
+        grads = param.grad.data.numpy().astype(np.float64)
+        grad_list.append((param_idx, grads))
+    return grad_list
 
-def add_fit_args(parser):
-    """
-    parser : argparse.ArgumentParser
-    return a parser added with args required by fit
-    """
-    # Training settings
-    parser.add_argument('--batch-size', type=int, default=128, metavar='N',
-                        help='input batch size for training (default: 64)')
-    parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
-                        help='input batch size for testing (default: 1000)')
-    parser.add_argument('--epochs', type=int, default=100, metavar='N',
-                        help='number of epochs to train (default: 10)')
-    parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
-                        help='learning rate (default: 0.01)')
-    parser.add_argument('--momentum', type=float, default=0.5, metavar='M',
-                        help='SGD momentum (default: 0.5)')
-    parser.add_argument('--no-cuda', action='store_true', default=False,
-                        help='disables CUDA training')
-    parser.add_argument('--seed', type=int, default=1, metavar='S',
-                        help='random seed (default: 1)')
-    parser.add_argument('--log-interval', type=int, default=10, metavar='N',
-                        help='how many batches to wait before logging training status')
-    parser.add_argument('--network', type=str, default='LeNet', metavar='N',
-                        help='which kind of network we are going to use, support LeNet and ResNet currently')
-    parser.add_argument('--dataset', type=str, default='MNIST', metavar='N',
-                        help='which dataset used in training, MNIST and Cifar10 supported currently')
-    args = parser.parse_args()
-    return args
+
+class ModelBuffer(object):
+    def __init__(self, network):
+        """
+        this class is used to save model weights received from parameter server
+        current step for each layer of model will also be updated here to make sure
+        the model is always up-to-date
+        """
+        self.recv_buf = []
+        self.layer_cur_step = []
+        '''initialize space to receive model from parameter server'''
+        #for key_name, param in network.state_dict().items():
+        #    self.recv_buf.append(np.zeros(param.size()))
+        #    self.layer_cur_step.append(0)
+
+        # consider we don't want to update the param of `BatchNorm` layer right now
+        # we temporirially deprecate the foregoing version and only update the model
+        # parameters
+        for param_idx, param in enumerate(network.parameters()):
+            self.recv_buf.append(np.zeros(param.size()))
+            self.layer_cur_step.append(0)
+
+
+class DistributedWorker(NN_Trainer):
+    def __init__(self, comm, **kwargs):
+        self.comm = comm   # get MPI communicator object
+        self.world_size = comm.Get_size() # total number of processes
+        self.rank = comm.Get_rank() # rank of this Worker
+        #self.status = MPI.Status()
+        self.cur_step = 0
+        self.next_step = 0 # we will fetch this one from parameter server
+
+        self.batch_size = kwargs['batch_size']
+        self.max_epochs = kwargs['max_epochs']
+        self.momentum = kwargs['momentum']
+        self.lr = kwargs['learning_rate']
+        self.network_config = kwargs['network']
+
+        # this one is going to be used to avoid fetch the weights for multiple times
+        self._layer_cur_step = []
+
+    def build_model(self):
+        # build network
+        if self.network_config == "LeNet":
+            self.network=LeNetSplit()
+        elif self.network_config == "ResNet":
+            self.network=ResNet18()
+
+        # set up optimizer
+        self.optimizer = torch.optim.SGD(self.network.parameters(), lr=self.lr, momentum=self.momentum)
+        self.criterion = nn.CrossEntropyLoss()
+        # assign a buffer for receiving models from parameter server
+        self.init_recv_buf()
+        self._param_idx = len(self.network.full_modules)*2-1
+
+    def train(self, train_loader):
+        # the first step we need to do here is to sync fetch the inital worl_step from the parameter server
+        # we still need to make sure the value we fetched from parameter server is 1
+        self.sync_fetch_step()
+        # do some sync check here
+        assert(self.update_step())
+        assert(self.cur_step == STEP_START_)
+
+        # number of batches in one epoch
+        num_batch_per_epoch = len(train_loader) / self.batch_size
+        batch_idx = -1
+        epoch_idx = 0
+        epoch_avg_loss = 0
+        iteration_last_step=0
+        iter_start_time=0
+
+        first = True
+
+        print("Worker {}: starting training".format(self.rank))
+        # start the training process
+        while True:
+            # the worker shouldn't know the current global step
+            # except received the message from parameter server
+            self.async_fetch_step()
+
+            # the only way every worker know which step they're currently on is to check the cur step variable
+            updated = self.update_step()
+
+            if (not updated) and (not first):
+                # wait here unitl enter next step
+                continue
+
+            # the real start point of this iteration
+            iteration_last_step = time.time() - iter_start_time
+            iter_start_time = time.time()
+            first = False
+            print("Rank of this node: {}, Current step: {}".format(self.rank, self.cur_step))
+
+            # TODO(hwang): return layer request here and do weight before the forward step begins, rather than implement
+            # the wait() in the fetch function
+            fetch_weight_start_time = time.time()
+            self.async_fetch_weights()
+            fetch_weight_duration = time.time() - fetch_weight_start_time
+
+            # start the normal training process
+            train_image_batch, train_label_batch = train_loader.next_batch(batch_size=self.batch_size)
+            X_batch, y_batch = Variable(train_image_batch.float()), Variable(train_label_batch.long())
+
+            # manage batch index manually
+            batch_idx += 1
+            self.optimizer.zero_grad()
+
+            if batch_idx == num_batch_per_epoch - 1:
+                batch_idx = 0
+                epoch_avg_loss /= num_batch_per_epoch
+                print("Average for epoch {} is {}".format(epoch_idx, epoch_avg_loss))
+                epoch_idx += 1
+                epoch_avg_loss = 0
+
+            # forward step
+            forward_start_time = time.time()
+            logits = self.network(X_batch)
+            logits_1 = Variable(logits.data, requires_grad=True)
+
+            loss = self.criterion(logits_1, y_batch)
+
+            epoch_avg_loss += loss.data[0]
+            forward_duration = time.time()-forward_start_time
+
+            # backward step
+            backward_start_time = time.time()
+            loss.backward()
+            # we can send the grad of this very first layer to parameter server right here before
+            # the chain rule is begining
+            req_send_check = []
+            init_grad_data = logits_1.grad.data.numpy()
+            init_grad_data = np.sum(init_grad_data, axis=0).astype(np.float64)
+            # send grad to parameter server
+            req_isend = self.comm.Isend([init_grad_data, MPI.DOUBLE], dest=0, tag=88+self._param_idx)
+            req_send_check.append(req_isend)
+            
+            self.network.backward(logits_1.grad, communicator=self.comm, req_send_check=req_send_check)
+            backward_duration = time.time()-backward_start_time
+            # TODO(hwang): figure out the killing process in pytorch framework asap
+            ###################################################################################
+            '''
+            req_send_check = []
+            grad_list = prepare_grad_list(self.network.parameters())
+            send_grad_start_time = time.time()
+            for grad_index_tuple in reversed(grad_list):
+                param_idx = grad_index_tuple[0]
+                grads = grad_index_tuple[1]
+                if len(req_send_check) != 0:
+                    req_send_check[-1].wait()
+                req_isend = self.comm.Isend([grads, MPI.DOUBLE], dest=0, tag=88+param_idx)
+                req_send_check.append(req_isend)
+            send_grad_duration = time.time() - send_grad_start_time
+            '''
+            ###################################################################################
+
+            # on the end of a certain iteration
+            print('Worker: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, TCLast: {:.4f}, FetchWeight: {:.4f}, Forward: {:.4f}, Backward: {:.4f}'.format(self.rank,
+                    epoch_idx, batch_idx * self.batch_size, self.batch_size*num_batch_per_epoch, 
+                    (100. * (batch_idx * self.batch_size) / (self.batch_size*num_batch_per_epoch)), loss.data[0], time.time()-iter_start_time, iteration_last_step, fetch_weight_duration, forward_duration, backward_duration))
+
+    def init_recv_buf(self):
+        self.model_recv_buf = ModelBuffer(self.network)
+
+    def sync_fetch_step(self):
+        '''fetch the first step from the parameter server'''
+        self.next_step = self.comm.recv(source=0, tag=10)
+
+    def async_fetch_step(self):
+        req = self.comm.irecv(source=0, tag=10)
+        self.next_step = req.wait()
+
+    def async_fetch_weights(self):
+        request_layers = []
+        layers_to_update = []
+        for layer_idx, layer in enumerate(self.model_recv_buf.recv_buf):
+            if self.model_recv_buf.layer_cur_step[layer_idx] < self.cur_step:
+                layers_to_update.append(layer_idx)
+                #print(self.model_recv_buf.recv_buf[layer_idx].shape)
+                #print('----------------------------------------------------------------------------')
+                req = self.comm.Irecv([self.model_recv_buf.recv_buf[layer_idx], MPI.DOUBLE], source=0, tag=11+layer_idx)
+                #req = self.comm.Irecv([self.model_recv_buf.recv_buf[layer_idx], MPI.FLOAT], source=0, tag=11+layer_idx)
+                request_layers.append(req)
+
+        assert (len(layers_to_update) == len(request_layers))
+        weights_to_update = []
+        for req_idx, req_l in enumerate(request_layers):
+            req_l.wait()
+            weights = self.model_recv_buf.recv_buf[req_idx]
+            weights_to_update.append(weights)
+            # we also need to update the layer cur step here:
+            self.model_recv_buf.layer_cur_step[req_idx] = self.cur_step
+        self.model_update(weights_to_update)    
+
+    def update_step(self):
+        '''update local (global) step on worker'''
+        changed = (self.cur_step != self.next_step)
+        self.cur_step = self.next_step
+        return changed
+
+    def model_update(self, weights_to_update):
+        """write model fetched from parameter server to local model"""
+        #new_state_dict = {}
+        new_state_dict=copy.deepcopy(self.network.state_dict())
+        model_counter_ = 0
+        for param_idx,(key_name, param) in enumerate(self.network.state_dict().items()):
+            # handle the case that `running_mean` and `running_var` contained in `BatchNorm` layer
+            if "running_mean" in key_name or "running_var" in key_name:
+                tmp_dict={key_name: param}
+            else:
+                assert param.size() == weights_to_update[model_counter_].shape
+                #tmp_dict = {key_name: torch.from_numpy(weights_to_update[model_counter_])}
+                new_state_dict[key_name] = torch.from_numpy(weights_to_update[model_counter_])
+                model_counter_ += 1
+            #new_state_dict.update(tmp_dict)
+            # TODO(hwang): this is not a stable solution, try to figure out a better one
+            if model_counter_ == len(weights_to_update):
+                break
+        self.network.load_state_dict(new_state_dict)
 
 if __name__ == "__main__":
     # this is only a simple test case
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     world_size = comm.Get_size()
-
-    args = add_fit_args(argparse.ArgumentParser(description='PyTorch MNIST Single Machine Test'))
-
-    # fetch dataset
-    if args.dataset == "MNIST":
-        mnist_data = mnist.read_data_sets(train_dir='./mnist_data', reshape=True)
-        train_set = MNISTDataset(dataset=mnist_data.train, transform=transforms.ToTensor())
-    elif args.dataset == "Cifar10":
-        cifar10_data = cifar10.read_data_sets(padding_size=0, reshape=True)
-        train_set = Cifar10Dataset(dataset=cifar10_data.train, transform=transforms.ToTensor())
-
-    kwargs = {'batch_size':args.batch_size, 'learning_rate':args.lr, 'max_epochs':args.epochs, 'momentum':args.momentum, 'network':args.network}
-
-    if rank == 0:
-        master_fc_nn = SyncReplicasMaster_NN(comm=comm, **kwargs)
-        master_fc_nn.build_model()
-        print("I am the master: the world size is {}, cur step: {}".format(master_fc_nn.world_size, master_fc_nn.cur_step))
-        master_fc_nn.train()
-        print("Done sending messages to workers!")
-    else:
-        worker_fc_nn = DistributedWorker(comm=comm, **kwargs)
-        worker_fc_nn.build_model()
-        print("I am worker: {} in all {} workers, next step: {}".format(worker_fc_nn.rank, worker_fc_nn.world_size-1, worker_fc_nn.next_step))
-        worker_fc_nn.train(train_loader=train_set)
-        print("Now the next step is: {}".format(worker_fc_nn.next_step))
+    worker_fc_nn = WorkerFC_NN(comm=comm, world_size=world_size, rank=rank)
+    print("I am worker: {} in all {} workers".format(worker_fc_nn.rank, worker_fc_nn.world_size))

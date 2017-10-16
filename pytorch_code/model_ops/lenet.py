@@ -2,6 +2,12 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+import pandas as pd
+import numpy as np
+from torch.autograd import Variable
+
+from mpi4py import MPI
+
 # we use LeNet here for our simple case
 class LeNet(nn.Module):
     def __init__(self):
@@ -34,18 +40,24 @@ class LeNetSplit(nn.Module):
     '''
     def __init__(self):
         super(LeNetSplit, self).__init__()
+        self.conv1 = nn.Conv2d(1, 20, 5, 1)
+        self.conv2 = nn.Conv2d(20, 50, 5, 1)
+        self.fc1 = nn.Linear(4*4*50, 500)
+        self.fc2 = nn.Linear(500, 10)
+        
         self.layers0 = nn.ModuleList([
-            nn.Conv2d(1, 20, 5, 1),
+            self.conv1,
             nn.MaxPool2d(2, stride=2),
             nn.ReLU(),
-            nn.Conv2d(20, 50, 5, 1),
+            self.conv2,
             nn.MaxPool2d(2, stride=2),
             nn.ReLU(),
             ])
         self.layers1 = nn.ModuleList([
-            nn.Linear(4*4*50, 500),
-            nn.Linear(500, 10),
+            self.fc1,
+            self.fc2,
             ])
+        self.full_modules = nn.ModuleList([self.conv1, self.conv2, self.fc1, self.fc2])
         self.criterion = nn.CrossEntropyLoss()
 
     def forward(self, x):
@@ -70,10 +82,50 @@ class LeNetSplit(nn.Module):
             self.output.append(x)
         return x
 
-    def backward(self, g):
+    def backward(self, g, communicator, req_send_check):
+        mod_avail_index = len(self.full_modules)-1
+        channel_index = len(self.full_modules)*2-2
+        mod_counters_ = [0]*len(self.full_modules)
         for i, output in reversed(list(enumerate(self.output))):
             if i == (len(self.output) - 1):
                 # for last node, use g
                 output.backward(g)
+                # get gradient here after some sanity checks:
+                tmp_grad = self.full_modules[mod_avail_index].weight.grad
+                if not pd.isnull(tmp_grad):
+                    grads = tmp_grad.data.numpy().astype(np.float64)
+                    req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                    req_send_check.append(req_isend)
+                    # update counters
+                    mod_avail_index-=1
+                    channel_index-=1
+                else:
+                    continue
             else:
                 output.backward(self.input[i+1].grad.data)
+                tmp_grad_weight = self.full_modules[mod_avail_index].weight.grad
+                tmp_grad_bias = self.full_modules[mod_avail_index].bias.grad
+                if not pd.isnull(tmp_grad_weight) and not pd.isnull(tmp_grad_bias):
+                    # we always send bias first
+                    if mod_counters_[mod_avail_index] == 0:
+                        grads = tmp_grad_bias.data.numpy().astype(np.float64)
+                        req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                        req_send_check.append(req_isend)
+                        channel_index-=1
+                        mod_counters_[mod_avail_index]+=1
+                    elif mod_counters_[mod_avail_index] == 1:
+                        grads = tmp_grad_weight.data.numpy().astype(np.float64)
+                        req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                        req_send_check.append(req_isend)
+                        channel_index-=1
+                        mod_counters_[mod_avail_index]+=1
+                        # update counters
+                        mod_avail_index-=1
+                else:
+                    continue
+        if mod_counters_[0] == 1:
+            grads = tmp_grad_weight.data.numpy().astype(np.float64)
+            req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+            req_send_check.append(req_isend)
+        #print(channel_index, mod_avail_index)
+        #print("*********************************************************************************")
