@@ -197,17 +197,14 @@ class DistributedWorker(NN_Trainer):
     def async_fetch_step(self):
         req = self.comm.irecv(source=0, tag=10)
         self.next_step = req.wait()
-
+    '''
     def async_fetch_weights(self):
         request_layers = []
         layers_to_update = []
         for layer_idx, layer in enumerate(self.model_recv_buf.recv_buf):
             if self.model_recv_buf.layer_cur_step[layer_idx] < self.cur_step:
                 layers_to_update.append(layer_idx)
-                #print(self.model_recv_buf.recv_buf[layer_idx].shape)
-                #print('----------------------------------------------------------------------------')
                 req = self.comm.Irecv([self.model_recv_buf.recv_buf[layer_idx], MPI.DOUBLE], source=0, tag=11+layer_idx)
-                #req = self.comm.Irecv([self.model_recv_buf.recv_buf[layer_idx], MPI.FLOAT], source=0, tag=11+layer_idx)
                 request_layers.append(req)
 
         assert (len(layers_to_update) == len(request_layers))
@@ -218,7 +215,24 @@ class DistributedWorker(NN_Trainer):
             weights_to_update.append(weights)
             # we also need to update the layer cur step here:
             self.model_recv_buf.layer_cur_step[req_idx] = self.cur_step
-        self.model_update(weights_to_update)    
+        self.model_update(weights_to_update)
+    '''
+    def async_fetch_weights(self):
+        layers_to_update = []
+        for layer_idx, layer in enumerate(self.model_recv_buf.recv_buf):
+            if self.model_recv_buf.layer_cur_step[layer_idx] < self.cur_step:
+                layers_to_update.append(layer_idx)
+                #req = self.comm.Irecv([self.model_recv_buf.recv_buf[layer_idx], MPI.DOUBLE], source=0, tag=11+layer_idx)
+                #request_layers.append(req)
+                self.comm.Bcast([self.model_recv_buf.recv_buf[layer_idx], MPI.DOUBLE], root=0)
+        weights_to_update = []
+
+        for req_idx, layer_idx in enumerate(layers_to_update):
+            weights = self.model_recv_buf.recv_buf[req_idx]
+            weights_to_update.append(weights)
+            # we also need to update the layer cur step here:
+            self.model_recv_buf.layer_cur_step[req_idx] = self.cur_step
+        self.model_update(weights_to_update)
 
     def update_step(self):
         '''update local (global) step on worker'''

@@ -185,7 +185,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 				req_list.append(self.comm.isend(self.cur_step, dest=i, tag=10))
 		for i in range(len(req_list)):
 			req_list[i].wait()
-
+	'''
 	def async_bcast_layer_weights(self):
 		request_layers = []
 		for layer_idx, layer in enumerate(self.network.parameters()):
@@ -194,13 +194,28 @@ class SyncReplicasMaster_NN(NN_Trainer):
 			for i in range(self.world_size):
 				if i != 0:
 					req = self.comm.Isend([layer_to_send, MPI.DOUBLE], dest=i, tag=11+layer_idx)
-					#req = self.comm.Isend([layer_to_send, MPI.FLOAT], dest=i, tag=11+layer_idx)
 					request_workers.append(req)
+
 			request_layers.append(request_workers)
 		# TODO(hwang): check to see if these `wait` calls are necessary here
 		for req_l in request_layers:
 			for req_worker in req_l:
 				req_worker.wait()
+	'''
+	def async_bcast_layer_weights(self):
+		request_layers = []
+		for layer_idx, layer in enumerate(self.network.parameters()):
+			request_workers = []
+			layer_to_send = layer.data.numpy().astype(np.float64)
+			for i in range(self.world_size):
+				if i != 0:
+					# try to see if collective communication is better here:
+					self.comm.Bcast([layer_to_send, MPI.DOUBLE], root=0)
+			#request_layers.append(request_workers)
+		# TODO(hwang): check to see if these `wait` calls are necessary here
+		#for req_l in request_layers:
+		#	for req_worker in req_l:
+		#		req_worker.wait()
 
 	def async_fetch_gradient_start(self):
 		'''make gradient fetch requests and return the request list'''
