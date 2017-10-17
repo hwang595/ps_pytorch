@@ -10,6 +10,7 @@ import torch
 from torch.autograd import Variable
 
 import time
+from datetime import datetime
 import copy
 
 STEP_START_ = 1
@@ -128,8 +129,9 @@ class DistributedWorker(NN_Trainer):
                 self.async_fetch_weights_bcast()
             elif self.comm_type == "Async":
                 self.async_fetch_weights_async()
-                
+
             fetch_weight_duration = time.time() - fetch_weight_start_time
+            time_point_log = datetime.now()
 
             # start the normal training process
             train_image_batch, train_label_batch = train_loader.next_batch(batch_size=self.batch_size)
@@ -175,9 +177,9 @@ class DistributedWorker(NN_Trainer):
             # TODO(hwang): figure out the killing process in pytorch framework asap
 
             # on the end of a certain iteration
-            print('Worker: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, FetchWeight: {:.4f}, Forward: {:.4f}, Backward: {:.4f}'.format(self.rank,
+            print('Worker: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, FetchWeight: {:.4f}, Forward: {:.4f}, Backward: {:.4f}, RealStartPoint: {}'.format(self.rank,
                     epoch_idx, batch_idx * self.batch_size, self.batch_size*num_batch_per_epoch, 
-                    (100. * (batch_idx * self.batch_size) / (self.batch_size*num_batch_per_epoch)), loss.data[0], time.time()-iter_start_time, fetch_weight_duration, forward_duration, backward_duration))
+                    (100. * (batch_idx * self.batch_size) / (self.batch_size*num_batch_per_epoch)), loss.data[0], time.time()-iter_start_time, fetch_weight_duration, forward_duration, backward_duration, time_point_log))
 
     def init_recv_buf(self):
         self.model_recv_buf = ModelBuffer(self.network)
