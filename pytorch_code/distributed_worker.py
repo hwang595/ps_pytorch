@@ -163,29 +163,16 @@ class DistributedWorker(NN_Trainer):
             req_isend = self.comm.Isend([init_grad_data, MPI.DOUBLE], dest=0, tag=88+self._param_idx)
             req_send_check.append(req_isend)
             
-            self.network.backward(logits_1.grad, communicator=self.comm, req_send_check=req_send_check)
+            req_send_check=self.network.backward(logits_1.grad, communicator=self.comm, req_send_check=req_send_check)
+            for req in req_send_check:
+                req.wait()
             backward_duration = time.time()-backward_start_time
             # TODO(hwang): figure out the killing process in pytorch framework asap
-            ###################################################################################
-            '''
-            req_send_check = []
-            grad_list = prepare_grad_list(self.network.parameters())
-            send_grad_start_time = time.time()
-            for grad_index_tuple in reversed(grad_list):
-                param_idx = grad_index_tuple[0]
-                grads = grad_index_tuple[1]
-                if len(req_send_check) != 0:
-                    req_send_check[-1].wait()
-                req_isend = self.comm.Isend([grads, MPI.DOUBLE], dest=0, tag=88+param_idx)
-                req_send_check.append(req_isend)
-            send_grad_duration = time.time() - send_grad_start_time
-            '''
-            ###################################################################################
 
             # on the end of a certain iteration
-            print('Worker: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, TCLast: {:.4f}, FetchWeight: {:.4f}, Forward: {:.4f}, Backward: {:.4f}'.format(self.rank,
+            print('Worker: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, FetchWeight: {:.4f}, Forward: {:.4f}, Backward: {:.4f}'.format(self.rank,
                     epoch_idx, batch_idx * self.batch_size, self.batch_size*num_batch_per_epoch, 
-                    (100. * (batch_idx * self.batch_size) / (self.batch_size*num_batch_per_epoch)), loss.data[0], time.time()-iter_start_time, iteration_last_step, fetch_weight_duration, forward_duration, backward_duration))
+                    (100. * (batch_idx * self.batch_size) / (self.batch_size*num_batch_per_epoch)), loss.data[0], time.time()-iter_start_time, fetch_weight_duration, forward_duration, backward_duration))
 
     def init_recv_buf(self):
         self.model_recv_buf = ModelBuffer(self.network)

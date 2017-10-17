@@ -127,5 +127,6 @@ class LeNetSplit(nn.Module):
             grads = tmp_grad_weight.data.numpy().astype(np.float64)
             req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
             req_send_check.append(req_isend)
+        return req_send_check
         #print(channel_index, mod_avail_index)
         #print("*********************************************************************************")
