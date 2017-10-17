@@ -184,7 +184,7 @@ class DistributedWorker(NN_Trainer):
     def async_fetch_step(self):
         req = self.comm.irecv(source=0, tag=10)
         self.next_step = req.wait()
-
+    '''
     def async_fetch_weights(self):
         request_layers = []
         layers_to_update = []
@@ -203,8 +203,8 @@ class DistributedWorker(NN_Trainer):
             # we also need to update the layer cur step here:
             self.model_recv_buf.layer_cur_step[req_idx] = self.cur_step
         self.model_update(weights_to_update)
- 
     '''
+    
     def async_fetch_weights(self):
         layers_to_update = []
         for layer_idx, layer in enumerate(self.model_recv_buf.recv_buf):
@@ -220,7 +220,7 @@ class DistributedWorker(NN_Trainer):
             # we also need to update the layer cur step here:
             self.model_recv_buf.layer_cur_step[req_idx] = self.cur_step
         self.model_update(weights_to_update)
-    '''
+    
     def update_step(self):
         '''update local (global) step on worker'''
         changed = (self.cur_step != self.next_step)
