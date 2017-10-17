@@ -186,7 +186,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 				req_list.append(self.comm.isend(self.cur_step, dest=i, tag=10))
 		for i in range(len(req_list)):
 			req_list[i].wait()
-	'''
+	
 	def async_bcast_layer_weights(self):
 		request_layers = []
 		for layer_idx, layer in enumerate(self.network.parameters()):
@@ -217,6 +217,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 		#for req_l in request_layers:
 		#	for req_worker in req_l:
 		#		req_worker.wait()
+	'''
 
 	def async_fetch_gradient_start(self):
 		'''make gradient fetch requests and return the request list'''
