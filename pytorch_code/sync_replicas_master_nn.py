@@ -87,6 +87,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 		self.lr = kwargs['learning_rate']
 		self.momentum = kwargs['momentum']
 		self.network_config = kwargs['network']
+		self.comm_type = kwargs['comm_method']
 
 		self._num_grad_to_collect = self.world_size - 1
 		# used to aggregate tmp gradients, the length is the same as # of fc layer 
@@ -120,7 +121,11 @@ class SyncReplicasMaster_NN(NN_Trainer):
 			print("Master node is entering step: {}".format(i))
 
 			self.async_bcast_step()
-			self.async_bcast_layer_weights()
+
+			if self.comm_type == "Bcast":
+				self.async_bcast_layer_weights_bcast()
+			elif self.comm_type == "Async":
+				self.async_bcast_layer_weights_async()
 			
 			# set the gradient fetch step and gather the request
 			gradient_fetch_requests=self.async_fetch_gradient_start()
@@ -186,8 +191,8 @@ class SyncReplicasMaster_NN(NN_Trainer):
 				req_list.append(self.comm.isend(self.cur_step, dest=i, tag=10))
 		for i in range(len(req_list)):
 			req_list[i].wait()
-	'''
-	def async_bcast_layer_weights(self):
+
+	def async_bcast_layer_weights_async(self):
 		request_layers = []
 		for layer_idx, layer in enumerate(self.network.parameters()):
 			request_workers = []
@@ -202,8 +207,8 @@ class SyncReplicasMaster_NN(NN_Trainer):
 		for req_l in request_layers:
 			for req_worker in req_l:
 				req_worker.wait()
-	'''
-	def async_bcast_layer_weights(self):
+
+	def async_bcast_layer_weights_bcast(self):
 		request_layers = []
 		for layer_idx, layer in enumerate(self.network.parameters()):
 			request_workers = []

@@ -64,6 +64,7 @@ class DistributedWorker(NN_Trainer):
         self.momentum = kwargs['momentum']
         self.lr = kwargs['learning_rate']
         self.network_config = kwargs['network']
+        self.comm_type = kwargs['comm_method']
 
         # this one is going to be used to avoid fetch the weights for multiple times
         self._layer_cur_step = []
@@ -123,7 +124,11 @@ class DistributedWorker(NN_Trainer):
             # TODO(hwang): return layer request here and do weight before the forward step begins, rather than implement
             # the wait() in the fetch function
             fetch_weight_start_time = time.time()
-            self.async_fetch_weights()
+            if self.comm_type == "Bcast":
+                self.async_fetch_weights_bcast()
+            elif self.comm_type == "Async":
+                self.async_fetch_weights_async()
+                
             fetch_weight_duration = time.time() - fetch_weight_start_time
 
             # start the normal training process
@@ -184,8 +189,8 @@ class DistributedWorker(NN_Trainer):
     def async_fetch_step(self):
         req = self.comm.irecv(source=0, tag=10)
         self.next_step = req.wait()
-    '''
-    def async_fetch_weights(self):
+
+    def async_fetch_weights_async(self):
         request_layers = []
         layers_to_update = []
         for layer_idx, layer in enumerate(self.model_recv_buf.recv_buf):
@@ -203,9 +208,8 @@ class DistributedWorker(NN_Trainer):
             # we also need to update the layer cur step here:
             self.model_recv_buf.layer_cur_step[req_idx] = self.cur_step
         self.model_update(weights_to_update)
-    '''
     
-    def async_fetch_weights(self):
+    def async_fetch_weights_bcast(self):
         layers_to_update = []
         for layer_idx, layer in enumerate(self.model_recv_buf.recv_buf):
             if self.model_recv_buf.layer_cur_step[layer_idx] < self.cur_step:

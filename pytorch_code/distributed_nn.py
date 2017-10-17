@@ -59,6 +59,8 @@ def add_fit_args(parser):
                         help='which kind of network we are going to use, support LeNet and ResNet currently')
     parser.add_argument('--dataset', type=str, default='MNIST', metavar='N',
                         help='which dataset used in training, MNIST and Cifar10 supported currently')
+    parser.add_argument('--comm-type', type=str, default='Bcast', metavar='N',
+                        help='which kind of method we use during the mode fetching stage')
     args = parser.parse_args()
     return args
 
@@ -78,7 +80,8 @@ if __name__ == "__main__":
         cifar10_data = cifar10.read_data_sets(padding_size=0, reshape=True)
         train_set = Cifar10Dataset(dataset=cifar10_data.train, transform=transforms.ToTensor())
 
-    kwargs = {'batch_size':args.batch_size, 'learning_rate':args.lr, 'max_epochs':args.epochs, 'momentum':args.momentum, 'network':args.network}
+    kwargs = {'batch_size':args.batch_size, 'learning_rate':args.lr, 'max_epochs':args.epochs, 'momentum':args.momentum, 'network':args.network,
+                'comm_method':args.comm_type}
 
     if rank == 0:
         master_fc_nn = SyncReplicasMaster_NN(comm=comm, **kwargs)
