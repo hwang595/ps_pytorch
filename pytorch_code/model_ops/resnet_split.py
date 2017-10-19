@@ -13,7 +13,6 @@ import torch.nn.functional as F
 
 from torch.autograd import Variable
 
-
 class BasicBlockSplit(nn.Module):
     expansion = 1
 
@@ -23,6 +22,7 @@ class BasicBlockSplit(nn.Module):
         self.bn1 = nn.BatchNorm2d(planes)
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn2 = nn.BatchNorm2d(planes)
+        self.relu = nn.ReLU()
 
         self.shortcut = nn.Sequential()
         if stride != 1 or in_planes != self.expansion*planes:
@@ -37,44 +37,37 @@ class BasicBlockSplit(nn.Module):
         '''
         # we skip the detach and append operation on the very first x here 
         # since that's done outside of this function
-        x = self.conv1(x)
-        output_list.append(x)
+        out = self.conv1(x)
+        output_list.append(out)
 
-        x = Variable(x.data, requires_grad=True)
-        input_list.append(x)
-        x = self.bn1(x)
-        output_list.append(x)
+        out = Variable(out.data, requires_grad=True)
+        input_list.append(out)
+        out = self.bn1(out)
+        output_list.append(out)
 
-        x = Variable(x.data, requires_grad=True)
-        input_list.append(x)
-        x = nn.ReLU(x)
-        output_list.append(x)
+        out = Variable(out.data, requires_grad=True)
+        input_list.append(out)
+        out = self.relu(out)
+        output_list.append(out)
 
-        x = Variable(x.data, requires_grad=True)
-        input_list.append(x)
-        x = self.conv2(x)
-        output_list.append(x)
+        out = Variable(out.data, requires_grad=True)
+        input_list.append(out)
+        out = self.conv2(out)
+        output_list.append(out)
 
-        x = Variable(x.data, requires_grad=True)
-        input_list.append(x)
-        x = self.bn2(x)
-        output_list.append(x)
+        out = Variable(out.data, requires_grad=True)
+        input_list.append(out)
+        out = self.bn2(out)
+        output_list.append(out)
 
         # TODO(hwang): figure out if this part also need hack
-        x += self.shortcut(x)
-
-        x = Variable(x.data, requires_grad=True)
-        input_list.append(x)
-        x = nn.ReLU(x)
-        output_list.append(x)
-        return x, input_list, output_list   
-        '''
-        out = F.relu(self.bn1(self.conv1(x)))
-        out = self.bn2(self.conv2(out))
         out += self.shortcut(x)
-        out = F.relu(out)
+
+        out = Variable(out.data, requires_grad=True)
+        input_list.append(out)
+        out = self.relu(out)
+        output_list.append(out)
         return out, input_list, output_list
-        '''
 
 
 class Bottleneck(nn.Module):
@@ -118,6 +111,8 @@ class ResNetSplit(nn.Module):
         self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
         self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
         self.linear = nn.Linear(512*block.expansion, num_classes)
+        self.relu = nn.ReLU()
+        self.avg_pool2d = nn.AvgPool2d(kernel_size=4)
 
     def _make_layer(self, block, planes, num_blocks, stride):
         strides = [stride] + [1]*(num_blocks-1)
@@ -149,24 +144,16 @@ class ResNetSplit(nn.Module):
 
         x = Variable(x.data, requires_grad=True)
         self.input.append(x)
-        x = nn.ReLU(x)
+        x = self.relu(x)
         self.output.append(x)
 
+        # start to handle blocks
         for layer in self.layer1:
             # each `layer` here is either a `BasicBlockSplit` or `BottleneckSplit`
             x = Variable(x.data, requires_grad=True)
             self.input.append(x)
             # call the `.forward()` func in `BasicBlockSplit` or `BottleneckSplit` here
             x, self.input, self.output = layer(x, self.input, self.output)
-            self.output.append(x)
-
-        for layer in self.layer1:
-            # each `layer` here is either a `BasicBlockSplit` or `BottleneckSplit`
-            x = Variable(x.data, requires_grad=True)
-            self.input.append(x)
-            # call the `.forward()` func in `BasicBlockSplit` or `BottleneckSplit` here
-            x, self.input, self.output = layer(x, self.input, self.output)
-            self.output.append(x)
 
         for layer in self.layer2:
             # each `layer` here is either a `BasicBlockSplit` or `BottleneckSplit`
@@ -174,7 +161,6 @@ class ResNetSplit(nn.Module):
             self.input.append(x)
             # call the `.forward()` func in `BasicBlockSplit` or `BottleneckSplit` here
             x, self.input, self.output = layer(x, self.input, self.output)
-            self.output.append(x)
 
         for layer in self.layer3:
             # each `layer` here is either a `BasicBlockSplit` or `BottleneckSplit`
@@ -182,7 +168,6 @@ class ResNetSplit(nn.Module):
             self.input.append(x)
             # call the `.forward()` func in `BasicBlockSplit` or `BottleneckSplit` here
             x, self.input, self.output = layer(x, self.input, self.output)
-            self.output.append(x)
 
         for layer in self.layer4:
             # each `layer` here is either a `BasicBlockSplit` or `BottleneckSplit`
@@ -190,35 +175,47 @@ class ResNetSplit(nn.Module):
             self.input.append(x)
             # call the `.forward()` func in `BasicBlockSplit` or `BottleneckSplit` here
             x, self.input, self.output = layer(x, self.input, self.output)
-            self.output.append(x)
 
         x = Variable(x.data, requires_grad=True)
         self.input.append(x)
-        x = nn.AvgPool2d(x)
+        x = self.avg_pool2d(x)
         self.output.append(x)
 
         x = x.view(x.size(0), -1)
-
+        
         x = Variable(x.data, requires_grad=True)
         self.input.append(x)
         x = self.linear(x)
         self.output.append(x)
         return x
-        '''
-        out = F.relu(self.bn1(self.conv1(x)))
-        out = self.layer1(out)
-        out = self.layer2(out)
-        out = self.layer3(out)
-        out = self.layer4(out)
-        out = F.avg_pool2d(out, 4)
-        out = out.view(out.size(0), -1)
-        out = self.linear(out)
-        return out
-        '''
+
     def backward(self, g):
         for i, output in reversed(list(enumerate(self.output))):
             if i == (len(self.output) - 1):
                 # for last node, use g
                 output.backward(g)
             else:
-                output.backward(self.input[i+1].grad.data)
+                if output.size() == self.input[i+1].grad.size():
+                    output.backward(self.input[i+1].grad.data)
+                else:
+                    tmp_grad_output = self.input[i+1].grad.view(output.size())
+                    output.backward(tmp_grad_output)
+
+def ResNetSplit18():
+    return ResNetSplit(BasicBlockSplit, [2,2,2,2])
+
+def ResNetSplit34():
+    return ResNetSplit(BasicBlockSplit, [3,4,6,3])
+
+def ResNetSplit50():
+    return ResNetSplit(Bottleneck, [3,4,6,3])
+
+def ResNetSplit101():
+    return ResNetSplit(Bottleneck, [3,4,23,3])
+
+def ResNetSplit152():
+    return ResNetSplit(Bottleneck, [3,8,36,3])
+
+if __name__ == "__main__":
+    a = ResNetSplit18()
+    print("Done!")
