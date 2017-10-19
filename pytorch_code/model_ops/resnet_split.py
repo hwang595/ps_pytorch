@@ -35,11 +35,46 @@ class BasicBlockSplit(nn.Module):
         '''
         the input_list and output_list here is similar to input/output in ResNet class
         '''
+        # we skip the detach and append operation on the very first x here 
+        # since that's done outside of this function
+        x = self.conv1(x)
+        output_list.append(x)
+
+        x = Variable(x.data, requires_grad=True)
+        input_list.append(x)
+        x = self.bn1(x)
+        output_list.append(x)
+
+        x = Variable(x.data, requires_grad=True)
+        input_list.append(x)
+        x = nn.ReLU(x)
+        output_list.append(x)
+
+        x = Variable(x.data, requires_grad=True)
+        input_list.append(x)
+        x = self.conv2(x)
+        output_list.append(x)
+
+        x = Variable(x.data, requires_grad=True)
+        input_list.append(x)
+        x = self.bn2(x)
+        output_list.append(x)
+
+        # TODO(hwang): figure out if this part also need hack
+        x += self.shortcut(x)
+
+        x = Variable(x.data, requires_grad=True)
+        input_list.append(x)
+        x = nn.ReLU(x)
+        output_list.append(x)
+        return x, input_list, output_list   
+        '''
         out = F.relu(self.bn1(self.conv1(x)))
         out = self.bn2(self.conv2(out))
         out += self.shortcut(x)
         out = F.relu(out)
         return out, input_list, output_list
+        '''
 
 
 class Bottleneck(nn.Module):
@@ -62,6 +97,7 @@ class Bottleneck(nn.Module):
             )
 
     def forward(self, x):
+        # we skip the detach operation on the very first x here since that's done outside of this function
         out = F.relu(self.bn1(self.conv1(x)))
         out = F.relu(self.bn2(self.conv2(out)))
         out = self.bn3(self.conv3(out))
@@ -99,7 +135,6 @@ class ResNetSplit(nn.Module):
         self.input = []
 
         # start the forward process right here implement the following logic to every intermediate var:
-        
         # detach from previous history
         x = Variable(x.data, requires_grad=True)
         self.input.append(x)
@@ -180,7 +215,6 @@ class ResNetSplit(nn.Module):
         out = self.linear(out)
         return out
         '''
-
     def backward(self, g):
         for i, output in reversed(list(enumerate(self.output))):
             if i == (len(self.output) - 1):
