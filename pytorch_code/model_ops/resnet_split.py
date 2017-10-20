@@ -138,6 +138,11 @@ class ResNetSplit(nn.Module):
 
         self.relu = nn.ReLU()
         self.avg_pool2d = nn.AvgPool2d(kernel_size=4)
+        self._init_channel_index = self.count_channel_index()
+
+    @property
+    def fetch_init_channel_index(self):
+        return self._init_channel_index
 
     def _make_layer(self, block, planes, num_blocks, stride):
         strides = [stride] + [1]*(num_blocks-1)
@@ -218,9 +223,18 @@ class ResNetSplit(nn.Module):
         self.output.append(x)
         return x
 
+    def count_channel_index(self):
+        channel_index_ = 0
+        for k, v in self.state_dict().items():
+            if "running_mean" in k or "running_var" in k:
+                continue
+            else:
+                channel_index_ += 1
+        return channel_index_
+
     def backward(self, g, communicator, req_send_check):
         mod_avail_index = len(self.full_modules)-1
-        channel_index = len(self.full_modules)*2-2
+        channel_index = self._init_channel_index-2
         mod_counters_ = [0]*len(self.full_modules)
         for i, output in reversed(list(enumerate(self.output))):
             if i == (len(self.output) - 1):
@@ -280,11 +294,35 @@ class ResNetSplit(nn.Module):
                             mod_avail_index-=1
                     else:
                         continue
-
-#        if mod_counters_[0] == 1:
-#            grads = tmp_grad_weight.data.numpy().astype(np.float64)
-#            req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
-#            req_send_check.append(req_isend)
+        # handle the remaining gradients here to send to parameter server
+        while channel_index >= 0:
+            if pd.isnull(self.full_modules[mod_avail_index].bias):
+                tmp_grad_weight = self.full_modules[mod_avail_index].weight.grad
+                grads = tmp_grad_weight.data.numpy().astype(np.float64)
+                req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                req_send_check.append(req_isend)
+                channel_index-=1
+                mod_counters_[mod_avail_index]=2
+                # update counters
+                mod_avail_index-=1
+            else:
+                tmp_grad_weight = self.full_modules[mod_avail_index].weight.grad
+                tmp_grad_bias = self.full_modules[mod_avail_index].bias.grad
+                # we always send bias first
+                if mod_counters_[mod_avail_index] == 0:
+                    grads = tmp_grad_bias.data.numpy().astype(np.float64)
+                    req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                    req_send_check.append(req_isend)
+                    channel_index-=1
+                    mod_counters_[mod_avail_index]+=1
+                elif mod_counters_[mod_avail_index] == 1:
+                    grads = tmp_grad_weight.data.numpy().astype(np.float64)
+                    req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                    req_send_check.append(req_isend)
+                    channel_index-=1
+                    mod_counters_[mod_avail_index]+=1
+                    # update counters
+                    mod_avail_index-=1
         return req_send_check
 
     '''

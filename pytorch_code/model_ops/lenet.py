@@ -49,6 +49,8 @@ class LeNetSplit(nn.Module):
         self.relu = nn.ReLU()
 
         self.full_modules = [self.conv1, self.conv2, self.fc1, self.fc2]
+        self._init_channel_index = len(self.full_modules)*2
+
         self.criterion = nn.CrossEntropyLoss()
 
     def forward(self, x):
@@ -97,9 +99,14 @@ class LeNetSplit(nn.Module):
         self.output.append(x)
         return x
 
+    @property
+    def fetch_init_channel_index(self):
+        return self._init_channel_index
+
     def backward(self, g, communicator, req_send_check):
         mod_avail_index = len(self.full_modules)-1
-        channel_index = len(self.full_modules)*2-2
+        #channel_index = len(self.full_modules)*2-2
+        channel_index = self._init_channel_index - 2
         mod_counters_ = [0]*len(self.full_modules)
         for i, output in reversed(list(enumerate(self.output))):
             if i == (len(self.output) - 1):

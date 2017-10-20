@@ -84,7 +84,8 @@ class DistributedWorker(NN_Trainer):
         self.criterion = nn.CrossEntropyLoss()
         # assign a buffer for receiving models from parameter server
         self.init_recv_buf()
-        self._param_idx = len(self.network.full_modules)*2-1
+        #self._param_idx = len(self.network.full_modules)*2-1
+        self._param_idx = self.network.fetch_init_channel_index-1
 
     def train(self, train_loader):
         # the first step we need to do here is to sync fetch the inital worl_step from the parameter server

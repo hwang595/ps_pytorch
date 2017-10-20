@@ -16,7 +16,7 @@ import torch
 STEP_START_ = 1
 
 #MAX_NUM_ITERATIONS = 1000000
-MAX_NUM_ITERATIONS = 2000
+MAX_NUM_ITERATIONS = 20000
 
 
 def update_params_dist_version(param, avg_grad, learning_rate):
@@ -231,6 +231,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 		gradient_fetch_requests = [] # `graident_fetch_request` should have length of #fc_layer*num_grad_to_collect
 		for layer_idx, layer in enumerate(self.network.parameters()):
 			for k in range(self._num_grad_to_collect):
+				#print(88+layer_idx, layer_idx)
 				req = self.comm.Irecv([self.grad_accumulator.gradient_aggregator[layer_idx][k], MPI.DOUBLE], source=MPI.ANY_SOURCE, tag=88+layer_idx)
 				#req = self.comm.Irecv([self.grad_accumulator.gradient_aggregator[layer_idx][k], MPI.FLOAT], source=MPI.ANY_SOURCE, tag=88+layer_idx)
 				gradient_fetch_requests.append(req)
