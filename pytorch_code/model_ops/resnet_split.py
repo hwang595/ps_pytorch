@@ -13,6 +13,11 @@ import torch.nn.functional as F
 
 from torch.autograd import Variable
 
+import pandas as pd
+import numpy as np
+
+from mpi4py import MPI
+
 class BasicBlockSplit(nn.Module):
     expansion = 1
 
@@ -233,7 +238,12 @@ class ResNetSplit(nn.Module):
                 else:
                     continue
             else:
-                output.backward(self.input[i+1].grad.data)
+                if output.size() == self.input[i+1].grad.size():
+                    output.backward(self.input[i+1].grad.data)
+                else:
+                    tmp_grad_output = self.input[i+1].grad.view(output.size())
+                    output.backward(tmp_grad_output)
+                
                 tmp_grad_weight = self.full_modules[mod_avail_index].weight.grad
                 tmp_grad_bias = self.full_modules[mod_avail_index].bias.grad
                 if not pd.isnull(tmp_grad_weight) and not pd.isnull(tmp_grad_bias):
