@@ -5,7 +5,7 @@ Reference:
     Deep Residual Learning for Image Recognition. arXiv:1512.03385
 
 
-Please Note that, this version is a hack, it's super hacky and quite hacky never call this one for normal use
+Please Note that, this version is a hack, it's super hacky, never call this one for normal use
 '''
 import torch
 import torch.nn as nn
@@ -18,10 +18,20 @@ class BasicBlockSplit(nn.Module):
 
     def __init__(self, in_planes, planes, stride=1):
         super(BasicBlockSplit, self).__init__()
+        self.full_modules = []
+
         self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
+        self.full_modules.append(self.conv1)
+
         self.bn1 = nn.BatchNorm2d(planes)
+        self.full_modules.append(self.bn1)
+
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=False)
+        self.full_modules.append(self.conv2)
+
         self.bn2 = nn.BatchNorm2d(planes)
+        self.full_modules.append(self.bn2)
+
         self.relu = nn.ReLU()
 
         self.shortcut = nn.Sequential()
@@ -30,6 +40,8 @@ class BasicBlockSplit(nn.Module):
                 nn.Conv2d(in_planes, self.expansion*planes, kernel_size=1, stride=stride, bias=False),
                 nn.BatchNorm2d(self.expansion*planes)
             )
+            self.full_modules.append(self.shortcut[0])
+            self.full_modules.append(self.shortcut[1])
 
     def forward(self, x, input_list, output_list):
         '''
@@ -103,14 +115,22 @@ class ResNetSplit(nn.Module):
     def __init__(self, block, num_blocks, num_classes=10):
         super(ResNetSplit, self).__init__()
         self.in_planes = 64
+        self.full_modules = []
 
         self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
+        self.full_modules.append(self.conv1)
+
         self.bn1 = nn.BatchNorm2d(64)
+        self.full_modules.append(self.bn1)
+
         self.layer1 = self._make_layer(block, 64, num_blocks[0], stride=1)
         self.layer2 = self._make_layer(block, 128, num_blocks[1], stride=2)
         self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
         self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
+
         self.linear = nn.Linear(512*block.expansion, num_classes)
+        self.full_modules.append(self.linear)
+
         self.relu = nn.ReLU()
         self.avg_pool2d = nn.AvgPool2d(kernel_size=4)
 
@@ -118,10 +138,14 @@ class ResNetSplit(nn.Module):
         strides = [stride] + [1]*(num_blocks-1)
         layers = []
         for stride in strides:
-            layers.append(block(self.in_planes, planes, stride))
+            block_layers = block(self.in_planes, planes, stride)
+            layers.append(block_layers)
+            for m in block_layers.full_modules:
+                self.full_modules.append(m)
+
             self.in_planes = planes * block.expansion
         layers_split = nn.ModuleList(layers)
-        #return nn.Sequential(*layers)
+
         return layers_split
 
     def forward(self, x):
@@ -189,17 +213,75 @@ class ResNetSplit(nn.Module):
         self.output.append(x)
         return x
 
-    def backward(self, g):
+    def backward(self, g, communicator, req_send_check):
+        mod_avail_index = len(self.full_modules)-1
+        channel_index = len(self.full_modules)*2-2
+        mod_counters_ = [0]*len(self.full_modules)
         for i, output in reversed(list(enumerate(self.output))):
             if i == (len(self.output) - 1):
                 # for last node, use g
                 output.backward(g)
+                # get gradient here after some sanity checks:
+                tmp_grad = self.full_modules[mod_avail_index].weight.grad
+                if not pd.isnull(tmp_grad):
+                    grads = tmp_grad.data.numpy().astype(np.float64)
+                    req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                    req_send_check.append(req_isend)
+                    # update counters
+                    mod_avail_index-=1
+                    channel_index-=1
+                else:
+                    continue
             else:
+                output.backward(self.input[i+1].grad.data)
+                tmp_grad_weight = self.full_modules[mod_avail_index].weight.grad
+                tmp_grad_bias = self.full_modules[mod_avail_index].bias.grad
+                if not pd.isnull(tmp_grad_weight) and not pd.isnull(tmp_grad_bias):
+                    # we always send bias first
+                    if mod_counters_[mod_avail_index] == 0:
+                        grads = tmp_grad_bias.data.numpy().astype(np.float64)
+                        req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                        req_send_check.append(req_isend)
+                        channel_index-=1
+                        mod_counters_[mod_avail_index]+=1
+                    elif mod_counters_[mod_avail_index] == 1:
+                        grads = tmp_grad_weight.data.numpy().astype(np.float64)
+                        req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                        req_send_check.append(req_isend)
+                        channel_index-=1
+                        mod_counters_[mod_avail_index]+=1
+                        # update counters
+                        mod_avail_index-=1
+                else:
+                    continue
+        if mod_counters_[0] == 1:
+            grads = tmp_grad_weight.data.numpy().astype(np.float64)
+            req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+            req_send_check.append(req_isend)
+        return req_send_check
+
+    '''
+    def backward(self, g):
+        for i, output in reversed(list(enumerate(self.output))):
+            #print("Backward processing, step {}".format(i))
+            #print("--------------------------------------------------------")
+            if i == (len(self.output) - 1):
+                # for last node, use g
+                output.backward(g)
+            else:
+                
+                #print(output.size())
+                #print(self.input[i+1].grad.size())
+                #tmp = self.input[i+1].grad.view(output.size())
+                #print(tmp.size())
+                #print("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+                
                 if output.size() == self.input[i+1].grad.size():
                     output.backward(self.input[i+1].grad.data)
                 else:
                     tmp_grad_output = self.input[i+1].grad.view(output.size())
                     output.backward(tmp_grad_output)
+    '''
 
 def ResNetSplit18():
     return ResNetSplit(BasicBlockSplit, [2,2,2,2])

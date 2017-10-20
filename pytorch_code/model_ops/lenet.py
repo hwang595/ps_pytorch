@@ -45,41 +45,56 @@ class LeNetSplit(nn.Module):
         self.fc1 = nn.Linear(4*4*50, 500)
         self.fc2 = nn.Linear(500, 10)
         
-        self.layers0 = nn.ModuleList([
-            self.conv1,
-            nn.MaxPool2d(2, stride=2),
-            nn.ReLU(),
-            self.conv2,
-            nn.MaxPool2d(2, stride=2),
-            nn.ReLU(),
-            ])
-        self.layers1 = nn.ModuleList([
-            self.fc1,
-            self.fc2,
-            ])
-        self.full_modules = nn.ModuleList([self.conv1, self.conv2, self.fc1, self.fc2])
+        self.maxpool2d = nn.MaxPool2d(2, stride=2)
+        self.relu = nn.ReLU()
+
+        self.full_modules = [self.conv1, self.conv2, self.fc1, self.fc2]
         self.criterion = nn.CrossEntropyLoss()
 
     def forward(self, x):
         self.output = []
         self.input = []
-        for layer in self.layers0:
-            # detach from previous history
-            x = Variable(x.data, requires_grad=True)
-            self.input.append(x)
-            # compute output
-            x = layer(x)
-            # add to list of outputs
-            self.output.append(x)
+        x = Variable(x.data, requires_grad=True)
+        self.input.append(x)
+        x = self.conv1(x)
+        self.output.append(x)
+
+        x = Variable(x.data, requires_grad=True)
+        self.input.append(x)
+        x = self.maxpool2d(x)
+        self.output.append(x)
+
+        x = Variable(x.data, requires_grad=True)
+        self.input.append(x)
+        x = self.relu(x)
+        self.output.append(x)
+
+        x = Variable(x.data, requires_grad=True)
+        self.input.append(x)
+        x = self.conv2(x)
+        self.output.append(x)
+
+        x = Variable(x.data, requires_grad=True)
+        self.input.append(x)
+        x = self.maxpool2d(x)
+        self.output.append(x)
+
+        x = Variable(x.data, requires_grad=True)
+        self.input.append(x)
+        x = self.relu(x)
+        self.output.append(x)
+
         x = x.view(-1, 4*4*50)
-        for layer in self.layers1:
-            # detach from previous history
-            x = Variable(x.data, requires_grad=True)
-            self.input.append(x)
-            # compute output
-            x = layer(x)
-            # add to list of outputs
-            self.output.append(x)
+
+        x = Variable(x.data, requires_grad=True)
+        self.input.append(x)
+        x = self.fc1(x)
+        self.output.append(x)
+
+        x = Variable(x.data, requires_grad=True)
+        self.input.append(x)
+        x = self.fc2(x)
+        self.output.append(x)
         return x
 
     def backward(self, g, communicator, req_send_check):

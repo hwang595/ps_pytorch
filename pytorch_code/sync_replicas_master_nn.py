@@ -242,8 +242,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 
 	def model_update(self, tmp_module):
 		"""write model fetched from parameter server to local model"""
-		#new_state_dict = {}
-		new_state_dict=copy.deepcopy(self.network.state_dict())
+		new_state_dict = {}
 		model_counter_ = 0
 		for param_idx,(key_name, param) in enumerate(self.network.state_dict().items()):
 			# handle the case that `running_mean` and `running_var` contained in `BatchNorm` layer
@@ -251,13 +250,9 @@ class SyncReplicasMaster_NN(NN_Trainer):
 				tmp_dict = {key_name : param}
 			else:
 				assert param.size() == tmp_module[model_counter_].shape
-				#tmp_dict = {key_name: torch.from_numpy(tmp_module[model_counter_])}
-				new_state_dict[key_name] = torch.from_numpy(tmp_module[model_counter_])
+				tmp_dict = {key_name: torch.from_numpy(tmp_module[model_counter_])}
 				model_counter_+=1
-			#new_state_dict.update(tmp_dict)
-			# TODO(hwang): this is not a stable solution, try to figure out a better one
-			if model_counter_ == len(tmp_module):
-				break
+			new_state_dict.update(tmp_dict)
 		self.network.load_state_dict(new_state_dict)
 
 	def meset_grad_buffer(self):
