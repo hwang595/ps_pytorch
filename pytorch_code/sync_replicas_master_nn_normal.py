@@ -96,8 +96,6 @@ class SyncReplicasMaster_NN(NN_Trainer):
 		self._grad_aggregate_buffer = []
 		self._model_shapes = []
 		self._first_grad_received = False
-		# represent the `k` in our settings
-		self._should_kill_threshold = 5
 
 	def build_model(self):
 		# build network
@@ -107,7 +105,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 			self.network=ResNetSplit18()
 		elif self.network_config == "ResNet34":
 			self.network=ResNetSplit34()
-
+		  
 		# TODO(hwang): make sure this is useful
 		self.optimizer = torch.optim.SGD(self.network.parameters(), lr=self.lr, momentum=self.momentum)
 		# assign a gradient accumulator to collect gradients from workers
@@ -125,11 +123,6 @@ class SyncReplicasMaster_NN(NN_Trainer):
 			self._first_grad_received = False
 			enough_gradients_received = False
 
-			# workers should be killed at this iteration, this can change from iteration to iteration
-			workers_should_kill = []
-			# in current version we only use this for the 1st layer
-			source_gathered = []
-
 			print("Master node is entering step: {}".format(i))
 
 			self.async_bcast_step()
@@ -142,13 +135,10 @@ class SyncReplicasMaster_NN(NN_Trainer):
 			# set the gradient fetch step and gather the request
 			gradient_fetch_requests=self.async_fetch_gradient_start()
 
-			received_req_indices = []
-
 			# wait for enough gradients to be aggregated:
 			while not enough_gradients_received:
 				status = MPI.Status()
-				req_index=MPI.Request.Waitany(requests=gradient_fetch_requests, status=status)
-				received_req_indices.append(req_index)
+				MPI.Request.Waitany(requests=gradient_fetch_requests, status=status)
 
 				if status.tag-88 in self.grad_accumulator.model_index_range:
 					if not self._first_grad_received:
@@ -164,50 +154,17 @@ class SyncReplicasMaster_NN(NN_Trainer):
 					# aggregate the gradient
 					self.aggregate_gradient(gradient=received_grad, layer_idx=layer_index)
 
-					if layer_index == 0:
-						source_gathered.append(status.source)
-
 					self.grad_accumulator.gradient_aggregate_counter[layer_index] += 1
-
-					################################ straggler killing process ###############################################		
-					if self.grad_accumulator.gradient_aggregate_counter[0] >= self._should_kill_threshold:
-						#print("Start the killing process!")
-						print("Start kill the worker")
-						
-						workers_should_kill = list(filter(lambda t: t not in source_gathered, [i for i in range(1, self.world_size)]))
-						print("Should kill list", workers_should_kill)
-						print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-						# this might be a naive solution, but for this version we wait the kill signal to be sent
-						kill_req_list=self.send_kill_signal(should_kill_list=workers_should_kill)
 					
-						for req in kill_req_list:
-							req.Wait()
-						print("Sent the killing signal")
-						break
-					##########################################################################################################
-					
-					print(self.grad_accumulator.gradient_aggregate_counter)
-					print('---------------------------------------------------------------------')
+					#print(self.grad_accumulator.gradient_aggregate_counter)
+					#print('---------------------------------------------------------------------')
 				
 				enough_gradients_received = True
-				for j_idx, j in enumerate(self.grad_accumulator.gradient_aggregate_counter):
-					if j_idx == 0:
-						enough_gradients_received = enough_gradients_received and (j >= self._should_kill_threshold)
-					else:
-						enough_gradients_received = enough_gradients_received and (j >= self._num_grad_to_collect)
-
-			# free all requests
-			remaining_req_indices = [i for i in range(len(gradient_fetch_requests)) if i not in received_req_indices]
-
-			#for req in reversed(gradient_fetch_requests):
-			for i in remaining_req_indices:
-				req = gradient_fetch_requests[i]
-				# this is essential
-				req.Cancel()
+				for j in self.grad_accumulator.gradient_aggregate_counter:
+					enough_gradients_received = enough_gradients_received and (j >= self._num_grad_to_collect)
 
 			grad_gather_duration = time.time()-grad_gather_start_time
 			print("Master: gradient gather time: {:.4f}".format(grad_gather_duration))
-
 			# average gradients and update the mode
 			for i in range(len(self._grad_aggregate_buffer)):
 				self._grad_aggregate_buffer[i] /= self._num_grad_to_collect
@@ -305,10 +262,3 @@ class SyncReplicasMaster_NN(NN_Trainer):
 	def meset_grad_buffer(self):
 		for i in range(len(self._grad_aggregate_buffer)):
 			self._grad_aggregate_buffer[i] = np.zeros(self._grad_aggregate_buffer[i].shape)
-
-	def send_kill_signal(self, should_kill_list):
-		kill_req_list = []
-		for worker_idx in should_kill_list:
-			req=self.comm.isend(-1, dest=worker_idx, tag=77)
-			kill_req_list.append(req)
-		return kill_req_list
