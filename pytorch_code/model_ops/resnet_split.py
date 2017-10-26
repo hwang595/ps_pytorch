@@ -325,7 +325,7 @@ class ResNetSplit(nn.Module):
                     mod_avail_index-=1
         return req_send_check
 
-    def backward_signal_kill(self, g, communicator, req_send_check):
+    def backward_signal_kill(self, g, communicator, req_send_check, cur_step):
         mod_avail_index = len(self.full_modules)-1
         channel_index = self._init_channel_index-2
         mod_counters_ = [0]*len(self.full_modules)
@@ -339,7 +339,7 @@ class ResNetSplit(nn.Module):
                 status = MPI.Status()
                 communicator.Iprobe(0, 77, status)
                 if status.Get_source() == 0:
-                    print("Worker {}: I'm the stragger, killing myself!".format(communicator.Get_rank()))
+                    print("Worker {}, Cur Step: {} I'm the stragger, killing myself!".format(communicator.Get_rank(), cur_step))
                     tmp = communicator.recv(source=0, tag=77)
                     should_kill = True
                     break
