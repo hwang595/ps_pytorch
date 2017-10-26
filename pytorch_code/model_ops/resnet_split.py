@@ -344,6 +344,7 @@ class ResNetSplit(nn.Module):
                     should_kill = True
                     break
             if should_kill:
+                channel_index=0
                 break
         ############################################################################################            
             if i == (len(self.output) - 1):
