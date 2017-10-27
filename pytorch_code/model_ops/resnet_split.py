@@ -339,7 +339,7 @@ class ResNetSplit(nn.Module):
                 status = MPI.Status()
                 communicator.Iprobe(0, 77, status)
                 if status.Get_source() == 0:
-                    print("Worker {}, Cur Step: {} I'm the stragger, killing myself!".format(communicator.Get_rank(), cur_step))
+                    print("Worker {}, Cur Step: {} I'm the straggler, killing myself!".format(communicator.Get_rank(), cur_step))
                     tmp = communicator.recv(source=0, tag=77)
                     should_kill = True
                     break
