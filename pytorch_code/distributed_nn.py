@@ -61,6 +61,8 @@ def add_fit_args(parser):
                         help='which dataset used in training, MNIST and Cifar10 supported currently')
     parser.add_argument('--comm-type', type=str, default='Bcast', metavar='N',
                         help='which kind of method we use during the mode fetching stage')
+    parser.add_argument('--num-aggregate', type=int, default=5, metavar='N',
+                        help='how many number of gradients we wish to gather at each iteration')
     args = parser.parse_args()
     return args
 
@@ -80,17 +82,20 @@ if __name__ == "__main__":
         cifar10_data = cifar10.read_data_sets(padding_size=0, reshape=True)
         train_set = Cifar10Dataset(dataset=cifar10_data.train, transform=transforms.ToTensor())
 
-    kwargs = {'batch_size':args.batch_size, 'learning_rate':args.lr, 'max_epochs':args.epochs, 'momentum':args.momentum, 'network':args.network,
+    kwargs_master = {'batch_size':args.batch_size, 'learning_rate':args.lr, 'max_epochs':args.epochs, 'momentum':args.momentum, 'network':args.network,
+                'comm_method':args.comm_type, 'kill_threshold': args.num_aggregate}
+
+    kwargs_worker = {'batch_size':args.batch_size, 'learning_rate':args.lr, 'max_epochs':args.epochs, 'momentum':args.momentum, 'network':args.network,
                 'comm_method':args.comm_type}
 
     if rank == 0:
-        master_fc_nn = SyncReplicasMaster_NN(comm=comm, **kwargs)
+        master_fc_nn = SyncReplicasMaster_NN(comm=comm, **kwargs_master)
         master_fc_nn.build_model()
         print("I am the master: the world size is {}, cur step: {}".format(master_fc_nn.world_size, master_fc_nn.cur_step))
         master_fc_nn.train()
         print("Done sending messages to workers!")
     else:
-        worker_fc_nn = DistributedWorker(comm=comm, **kwargs)
+        worker_fc_nn = DistributedWorker(comm=comm, **kwargs_worker)
         worker_fc_nn.build_model()
         print("I am worker: {} in all {} workers, next step: {}".format(worker_fc_nn.rank, worker_fc_nn.world_size-1, worker_fc_nn.next_step))
         worker_fc_nn.train(train_loader=train_set)

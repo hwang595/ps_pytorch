@@ -97,7 +97,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 		self._model_shapes = []
 		self._first_grad_received = False
 		# represent the `k` in our settings
-		self._should_kill_threshold = 5
+		self._should_kill_threshold = kwargs['kill_threshold']
 
 	def build_model(self):
 		# build network
