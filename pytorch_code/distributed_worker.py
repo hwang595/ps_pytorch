@@ -177,6 +177,9 @@ class DistributedWorker(NN_Trainer):
             
             req_send_check, killed=self.network.backward_signal_kill(logits_1.grad, communicator=self.comm, req_send_check=req_send_check, cur_step=self.cur_step)
 
+            for req in req_send_check:
+                    req.wait()
+            '''
             if not killed:
                 for req in req_send_check:
                     req.wait()
@@ -184,7 +187,7 @@ class DistributedWorker(NN_Trainer):
                 # if the worker is killed, we are trying to `cancel` their requests
                 for req in req_send_check:
                     req.Cancel()
-
+            '''
             backward_duration = time.time()-backward_start_time
             # TODO(hwang): figure out the killing process in pytorch framework asap
 
