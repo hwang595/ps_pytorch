@@ -344,7 +344,7 @@ class ResNetSplit(nn.Module):
                     should_kill = True
                     break
             if should_kill:
-                channel_index=0
+                channel_index=-1
                 break
         ############################################################################################            
             if i == (len(self.output) - 1):
@@ -433,7 +433,11 @@ class ResNetSplit(nn.Module):
                     mod_counters_[mod_avail_index]+=1
                     # update counters
                     mod_avail_index-=1
-        return req_send_check
+        if channel_index == 0:
+            killed = False
+        elif channel_index == -1:
+            killed = True
+        return req_send_check, killed
 
     '''
     def backward(self, g):

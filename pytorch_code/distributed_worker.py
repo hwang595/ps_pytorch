@@ -175,11 +175,12 @@ class DistributedWorker(NN_Trainer):
             req_isend = self.comm.Isend([init_grad_data, MPI.DOUBLE], dest=0, tag=88+self._param_idx)
             req_send_check.append(req_isend)
             
-            req_send_check=self.network.backward_signal_kill(logits_1.grad, communicator=self.comm, req_send_check=req_send_check, cur_step=self.cur_step)
-            print("Worker {} waiting here ... ".format(self.rank))
-            for req in req_send_check:
-                req.wait()
-            print("Worker {} done waiting !".format(self.rank))
+            req_send_check, killed=self.network.backward_signal_kill(logits_1.grad, communicator=self.comm, req_send_check=req_send_check, cur_step=self.cur_step)
+
+            if not killed:
+                for req in req_send_check:
+                    req.wait()
+
             backward_duration = time.time()-backward_start_time
             # TODO(hwang): figure out the killing process in pytorch framework asap
 
