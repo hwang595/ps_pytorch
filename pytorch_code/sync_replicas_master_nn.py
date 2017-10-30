@@ -186,8 +186,8 @@ class SyncReplicasMaster_NN(NN_Trainer):
 						break
 					##########################################################################################################
 					
-					print(self.grad_accumulator.gradient_aggregate_counter)
-					print('---------------------------------------------------------------------')
+					#print(self.grad_accumulator.gradient_aggregate_counter)
+					#print('---------------------------------------------------------------------')
 				
 				enough_gradients_received = True
 				for j_idx, j in enumerate(self.grad_accumulator.gradient_aggregate_counter):

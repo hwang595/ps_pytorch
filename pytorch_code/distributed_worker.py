@@ -184,7 +184,7 @@ class DistributedWorker(NN_Trainer):
                 for req in req_send_check:
                     req.wait()
             else:
-                print("################### Worker {}, I'm killed in a wierd way! ###################")
+                print("################### Worker {}, I'm killed in a wierd way! ###################".format(self.rank))
                 # if the worker is killed, we are trying to `cancel` their requests
                 for req in req_send_check:
                     req.Cancel()
