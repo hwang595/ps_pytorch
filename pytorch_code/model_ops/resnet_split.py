@@ -433,6 +433,7 @@ class ResNetSplit(nn.Module):
                     mod_counters_[mod_avail_index]+=1
                     # update counters
                     mod_avail_index-=1
+        print("##### Worker {}, Model Available index: {} ######".format(communicator.Get_rank(), mod_avail_index))
         if channel_index == 0:
             killed = False
         elif channel_index == -1:
