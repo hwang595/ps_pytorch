@@ -335,17 +335,17 @@ class ResNetSplit(nn.Module):
         
         for i, output in reversed(list(enumerate(self.output))):
         ############################ killing process on workers #####################################
-        #    for _ in range(10000):
-        #        status = MPI.Status()
-        #        communicator.Iprobe(0, 77, status)
-        #        if status.Get_source() == 0:
-        #            print("Worker {}, Cur Step: {} I'm the straggler, killing myself!".format(communicator.Get_rank(), cur_step))
-        #            tmp = communicator.recv(source=0, tag=77)
-        #            should_kill = True
-        #            break
-        #    if should_kill:
-        #        channel_index=-1
-        #        break
+            for _ in range(10000):
+                status = MPI.Status()
+                communicator.Iprobe(0, 77, status)
+                if status.Get_source() == 0:
+                    print("Worker {}, Cur Step: {} I'm the straggler, killing myself!".format(communicator.Get_rank(), cur_step))
+                    tmp = communicator.recv(source=0, tag=77)
+                    should_kill = True
+                    break
+            if should_kill:
+                channel_index=-5
+                break
         ############################################################################################            
             if i == (len(self.output) - 1):
                 # for last node, use g
