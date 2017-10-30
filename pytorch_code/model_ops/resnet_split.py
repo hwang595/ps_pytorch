@@ -335,7 +335,7 @@ class ResNetSplit(nn.Module):
         
         for i, output in reversed(list(enumerate(self.output))):
         ############################ killing process on workers #####################################
-            for _ in range(1):
+            for _ in range(0):
                 status = MPI.Status()
                 communicator.Iprobe(0, 77, status)
                 if status.Get_source() == 0:
