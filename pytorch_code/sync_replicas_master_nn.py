@@ -145,11 +145,18 @@ class SyncReplicasMaster_NN(NN_Trainer):
 			received_req_indices = []
 
 			# wait for enough gradients to be aggregated:
+
+			# in timeout strategy we also make a fake time out on master process
+			time_out_init_time = time.time()
 			while not enough_gradients_received:
 				status = MPI.Status()
 				req_index=MPI.Request.Waitany(requests=gradient_fetch_requests, status=status)
 				received_req_indices.append(req_index)
 
+				# naive timeout on master
+				if time.time() - time_out_init_time > 20:
+					break
+				
 				if status.tag-88 in self.grad_accumulator.model_index_range:
 					if not self._first_grad_received:
 						self._first_grad_received=True
@@ -170,7 +177,11 @@ class SyncReplicasMaster_NN(NN_Trainer):
 					self.grad_accumulator.gradient_aggregate_counter[layer_index] += 1
 
 					################################ straggler killing process ###############################################	
-					'''	
+					'''
+					# signel killing method:
+					# the killing process is triggering by master sending killing signal to straggler nodes
+					# this can be not efficient given heavy communication overhead we faced
+
 					if self.grad_accumulator.gradient_aggregate_counter[0] >= self._should_kill_threshold:
 						#print("Start the killing process!")
 						print("Start kill the worker")
@@ -186,6 +197,10 @@ class SyncReplicasMaster_NN(NN_Trainer):
 						print("Sent the killing signal")
 						break
 					'''
+					# timeout killing method:
+					# this killing strategy is triggered by workers timeout their backward process
+					# on master side, gradient requests need to be correctly handled
+
 					##########################################################################################################
 					
 					print(self.grad_accumulator.gradient_aggregate_counter)
