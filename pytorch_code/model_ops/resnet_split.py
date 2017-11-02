@@ -238,6 +238,8 @@ class ResNetSplit(nn.Module):
         channel_index = self._init_channel_index-2
         mod_counters_ = [0]*len(self.full_modules)
         for i, output in reversed(list(enumerate(self.output))):
+            # test here:
+            req_send_check[-1].wait()
             if i == (len(self.output) - 1):
                 # for last node, use g
                 output.backward(g)
@@ -297,6 +299,8 @@ class ResNetSplit(nn.Module):
                         continue
         # handle the remaining gradients here to send to parameter server
         while channel_index >= 0:
+            # test here:
+            req_send_check[-1].wait()
             if pd.isnull(self.full_modules[mod_avail_index].bias):
                 tmp_grad_weight = self.full_modules[mod_avail_index].weight.grad
                 grads = tmp_grad_weight.data.numpy().astype(np.float64)
