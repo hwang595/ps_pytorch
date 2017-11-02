@@ -175,22 +175,25 @@ class DistributedWorker(NN_Trainer):
             req_isend = self.comm.Isend([init_grad_data, MPI.DOUBLE], dest=0, tag=88+self._param_idx)
             req_send_check.append(req_isend)
             
-            req_send_check, killed=self.network.backward_signal_kill(logits_1.grad, communicator=self.comm, req_send_check=req_send_check, cur_step=self.cur_step)
+            #req_send_check, killed=self.network.backward_signal_kill(logits_1.grad, communicator=self.comm, req_send_check=req_send_check, cur_step=self.cur_step)
+            # Try Timeout killing strategy this time:
+            try:
+                req_send_check = self.network.backward_timeout_kill(logits_1.grad, communicator=self.comm, req_send_check=req_send_check, cur_step=self.cur_step)
+                for req in req_send_check:
+                    req.wait()
+            except StopIteration:
+                print("Worker: {} Timeout".format(self.rank))
 
-            #for req in req_send_check:
-            #        req.wait()
-            
+            '''
             if not killed:
                 for req in req_send_check:
                     req.wait()
             else:
-                print("################### Worker {}, I'm killed in a wierd way! ###################".format(self.rank))
                 # if the worker is killed, we are trying to `cancel` their requests
                 for req in req_send_check:
                     req.Cancel()
-            
+            '''
             backward_duration = time.time()-backward_start_time
-            # TODO(hwang): figure out the killing process in pytorch framework asap
 
             # on the end of a certain iteration
             print('Worker: {}, Cur Step: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, FetchWeight: {:.4f}, Forward: {:.4f}, Backward: {:.4f}'.format(self.rank,

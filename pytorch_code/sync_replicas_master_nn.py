@@ -169,7 +169,8 @@ class SyncReplicasMaster_NN(NN_Trainer):
 
 					self.grad_accumulator.gradient_aggregate_counter[layer_index] += 1
 
-					################################ straggler killing process ###############################################		
+					################################ straggler killing process ###############################################	
+					'''	
 					if self.grad_accumulator.gradient_aggregate_counter[0] >= self._should_kill_threshold:
 						#print("Start the killing process!")
 						print("Start kill the worker")
@@ -184,10 +185,11 @@ class SyncReplicasMaster_NN(NN_Trainer):
 							req.Wait()
 						print("Sent the killing signal")
 						break
+					'''
 					##########################################################################################################
 					
-					#print(self.grad_accumulator.gradient_aggregate_counter)
-					#print('---------------------------------------------------------------------')
+					print(self.grad_accumulator.gradient_aggregate_counter)
+					print('---------------------------------------------------------------------')
 				
 				enough_gradients_received = True
 				for j_idx, j in enumerate(self.grad_accumulator.gradient_aggregate_counter):
