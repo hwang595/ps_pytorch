@@ -30,9 +30,12 @@ def decode_tag(value):
     :param batch: 4 digit
     :return:
     '''
-    layer_tag = value % LAYER_DIGITS
-    step_token = value / LAYER_DIGITS
-    return layer_tag, step_token
+    if value < 0: # no request pass the req.test
+    	return -1, None
+    else:
+    	layer_tag = value % LAYER_DIGITS
+    	step_token = value / LAYER_DIGITS
+    	return layer_tag, step_token
 
 def update_params_dist_version(param, avg_grad, learning_rate):
     '''
@@ -173,8 +176,8 @@ class SyncReplicasMaster_NN(NN_Trainer):
 				# implement master timeout strategy
 				if self.check_timeout_flag():
 					break
-				if status.tag > 0:
-					layer_tag, step_token = decode_tag(status.tag)
+
+				layer_tag, step_token = decode_tag(status.tag)
 				#if status.tag-88 in self.grad_accumulator.model_index_range:
 				if layer_tag-88 in self.grad_accumulator.model_index_range:
 					if not self._first_grad_received:
