@@ -215,7 +215,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 					if j_idx == 0:
 						enough_gradients_received = enough_gradients_received and (j >= self._should_kill_threshold)
 						# we look ahead here to consider if not enough gradients are sending to master
-						if j >= self._expected_grad_to_recv-2:
+						if j >= self._expected_grad_to_recv-2 and self._master_timeout_start is None:
 							# TODO(hwang): check to see if this interval is appropriate
 							self._master_timeout_start = time.time()
 					else:
