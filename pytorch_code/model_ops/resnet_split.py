@@ -479,7 +479,6 @@ class ResNetSplit(nn.Module):
         # meset request list of killed workers
         self.killed_request_list = []
         for i, output in reversed(list(enumerate(self.output))):
-            print("Worker {} executing backward of layer {}".format(communicator.rank, i))
             # send layer only after the last layer is received
             req_send_check[-1].wait()
             if i == (len(self.output) - 1):
