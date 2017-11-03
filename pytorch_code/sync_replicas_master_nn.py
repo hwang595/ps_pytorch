@@ -336,5 +336,5 @@ class SyncReplicasMaster_NN(NN_Trainer):
 	@timeout_decorator.timeout(5, timeout_exception=StopIteration)
 	def get_waitany_status(self, requests):
 		status = MPI.Status()
-		req_index=MPI.Request.Waitany(requests=gradient_fetch_requests, status=status)
+		req_index=MPI.Request.Waitany(requests=requests, status=status)
 		return req_index
