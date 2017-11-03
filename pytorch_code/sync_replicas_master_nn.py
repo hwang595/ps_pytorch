@@ -180,7 +180,9 @@ class SyncReplicasMaster_NN(NN_Trainer):
 
 				layer_tag, step_token = decode_tag(status.tag)
 				#if status.tag-88 in self.grad_accumulator.model_index_range:
-				if layer_tag-88 in self.grad_accumulator.model_index_range:
+				if layer_tag-88 in self.grad_accumulator.model_index_range and step_token == self.cur_step:
+					# by checking step token, we make sure that:
+					# if a stale gradient come, we through it away directly
 					if not self._first_grad_received:
 						self._first_grad_received=True
 						grad_gather_start_time = time.time()
