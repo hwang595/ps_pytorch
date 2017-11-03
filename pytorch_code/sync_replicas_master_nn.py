@@ -321,8 +321,8 @@ class SyncReplicasMaster_NN(NN_Trainer):
 		for layer_idx, layer in enumerate(self.network.parameters()):
 			for k in range(self._num_grad_to_collect):
 				#print(88+layer_idx, layer_idx)
-				req = self.comm.Irecv([self.grad_accumulator.gradient_aggregator[layer_idx][k], MPI.DOUBLE], source=MPI.ANY_SOURCE, tag=88+layer_idx)
-				#req = self.comm.Irecv([self.grad_accumulator.gradient_aggregator[layer_idx][k], MPI.FLOAT], source=MPI.ANY_SOURCE, tag=88+layer_idx)
+				#req = self.comm.Irecv([self.grad_accumulator.gradient_aggregator[layer_idx][k], MPI.DOUBLE], source=MPI.ANY_SOURCE, tag=88+layer_idx)
+				req = self.comm.Irecv([self.grad_accumulator.gradient_aggregator[layer_idx][k], MPI.DOUBLE], source=MPI.ANY_SOURCE, tag=generate_tag(layer_tag=88+layer_idx, step_token=self.cur_step))	
 				gradient_fetch_requests.append(req)
 		return gradient_fetch_requests
 
