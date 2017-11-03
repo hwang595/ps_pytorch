@@ -117,7 +117,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 		# represent the `k` in our settings
 		self._should_kill_threshold = kwargs['kill_threshold']
 		self._expected_grad_to_recv = kwargs['kill_threshold']
-		self._master_timeout_interval = 3
+		self._master_timeout_interval = 8
 
 	def build_model(self):
 		# build network
@@ -175,6 +175,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 
 				# implement master timeout strategy
 				if self.check_timeout_flag():
+					print("!!!!!!!!!!!!!!!!!!!!!Master Timeout!!!!!!!!!!!!!!!!!!!!!!!")
 					break
 
 				layer_tag, step_token = decode_tag(status.tag)
