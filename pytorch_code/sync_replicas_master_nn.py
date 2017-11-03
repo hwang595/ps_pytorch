@@ -153,12 +153,13 @@ class SyncReplicasMaster_NN(NN_Trainer):
 
 				#status = MPI.Status()
 				#req_index=MPI.Request.Waitany(requests=gradient_fetch_requests, status=status)
-				self.get_waitany_status(gradient_fetch_requests)
-				received_req_indices.append(req_index)
+				try:
+					status, req_index=self.get_waitany_status(gradient_fetch_requests)
+				except StopIteration:
+					print("Master time out!")
+                	break
 
-				# naive timeout on master
-				if time.time() - time_out_init_time > 20:
-					break
+				received_req_indices.append(req_index)
 				
 				if status.tag-88 in self.grad_accumulator.model_index_range:
 					if not self._first_grad_received:
@@ -337,4 +338,4 @@ class SyncReplicasMaster_NN(NN_Trainer):
 	def get_waitany_status(self, requests):
 		status = MPI.Status()
 		req_index=MPI.Request.Waitany(requests=requests, status=status)
-		return req_index
+		return status, req_index
