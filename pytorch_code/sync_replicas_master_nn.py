@@ -21,6 +21,19 @@ MPI_TEST_NULL_CODE_ = -32766
 MAX_NUM_ITERATIONS = 20000
 
 
+def decode_tag(value):
+    '''
+    Tag component [batch, epoch, layer_id, worker_rank]
+    :param worker_rank: 2 digit
+    :param epoch: 3 digit
+    :param layer_id: 2 digit
+    :param batch: 4 digit
+    :return:
+    '''
+    layer_tag = value % LAYER_DIGITS
+    step_token = value / LAYER_DIGITS
+    return layer_tag, step_token
+
 def update_params_dist_version(param, avg_grad, learning_rate):
     '''
     update the network layer by layer
@@ -161,7 +174,9 @@ class SyncReplicasMaster_NN(NN_Trainer):
 				if self.check_timeout_flag():
 					break
 				
-				if status.tag-88 in self.grad_accumulator.model_index_range:
+				layer_tag, step_token = decode_tag(status_tag)
+				#if status.tag-88 in self.grad_accumulator.model_index_range:
+				if layer_tag-88 in self.grad_accumulator.model_index_range:
 					if not self._first_grad_received:
 						self._first_grad_received=True
 						grad_gather_start_time = time.time()

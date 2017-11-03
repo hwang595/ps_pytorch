@@ -19,6 +19,8 @@ STEP_START_ = 1
 
 TAG_LIST_ = [i*30 for i in range(50000)]
 
+LAYER_DIGITS= int(1e+3)
+
 def prepare_grad_list(params):
     grad_list = []
     for param_idx, param in enumerate(params):
@@ -172,20 +174,24 @@ class DistributedWorker(NN_Trainer):
             init_grad_data = logits_1.grad.data.numpy()
             init_grad_data = np.sum(init_grad_data, axis=0).astype(np.float64)
             # send grad to parameter server
-            req_isend = self.comm.Isend([init_grad_data, MPI.DOUBLE], dest=0, tag=88+self._param_idx)
+            #req_isend = self.comm.Isend([init_grad_data, MPI.DOUBLE], dest=0, tag=88+self._param_idx)
+            req_isend = self.comm.Isend([init_grad_data, MPI.DOUBLE], dest=0, tag=generate_tag(layer_tag=88+self._param_idx, step_token=self.cur_step))
             req_send_check.append(req_isend)
             
             # Try signal killing method here:
             #req_send_check, killed=self.network.backward_signal_kill(logits_1.grad, communicator=self.comm, req_send_check=req_send_check, cur_step=self.cur_step)
             
             # Try Timeout killing strategy this time:
+            '''
             print("Worker {} entering backward process".format(self.rank))
             try:
                 req_send_check = self.network.backward_timeout_kill(logits_1.grad, communicator=self.comm, req_send_check=req_send_check, cur_step=self.cur_step)
             except StopIteration:
                 print("Worker: {} Timeout".format(self.rank))
+            '''
+
             # Normal backward
-            #req_send_check=self.network.backward(logits_1.grad, communicator=self.comm, req_send_check=req_send_check)
+            req_send_check=self.network.backward(logits_1.grad, communicator=self.comm, req_send_check=req_send_check, cur_step=self.cur_step)
             # test here, this should complete the backward communication process:
             req_send_check[-1].wait()
             print("Worker {} done backward process".format(self.rank))

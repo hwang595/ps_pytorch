@@ -19,6 +19,22 @@ import timeout_decorator
 
 from mpi4py import MPI
 
+def generate_tag(layer_tag, step_token):
+    '''
+    Tag component [current-step-token (which help to recogize stale gradient)
+                   +layer-tag]
+    we only limit the digits for layer tag here since step token can be 
+    extremely large e.g. 10k steps
+
+    :param layer_tag
+    :param step token
+    :return:
+    '''
+    tag = step_token * LAYER_DIGITS \
+          + layer_tag
+    tag = int(tag)
+    return tag
+
 class BasicBlockSplit(nn.Module):
     expansion = 1
 
@@ -235,7 +251,7 @@ class ResNetSplit(nn.Module):
                 channel_index_ += 1
         return channel_index_
 
-    def backward(self, g, communicator, req_send_check):
+    def backward(self, g, communicator, req_send_check, cur_step):
         mod_avail_index = len(self.full_modules)-1
         channel_index = self._init_channel_index-2
         mod_counters_ = [0]*len(self.full_modules)
@@ -249,7 +265,8 @@ class ResNetSplit(nn.Module):
                 tmp_grad = self.full_modules[mod_avail_index].weight.grad
                 if not pd.isnull(tmp_grad):
                     grads = tmp_grad.data.numpy().astype(np.float64)
-                    req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                    #req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                    req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, generate_tag(layer_tag=88+channel_index, step_token=cur_step))
                     req_send_check.append(req_isend)
                     # update counters
                     mod_avail_index-=1
@@ -269,7 +286,8 @@ class ResNetSplit(nn.Module):
 
                     if not pd.isnull(tmp_grad_weight):
                         grads = tmp_grad_weight.data.numpy().astype(np.float64)
-                        req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                        #req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                        req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, generate_tag(layer_tag=88+channel_index, step_token=cur_step))
                         req_send_check.append(req_isend)
                         channel_index-=1
                         mod_counters_[mod_avail_index]=2
@@ -285,13 +303,15 @@ class ResNetSplit(nn.Module):
                         # we always send bias first
                         if mod_counters_[mod_avail_index] == 0:
                             grads = tmp_grad_bias.data.numpy().astype(np.float64)
-                            req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                            #req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                            req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, generate_tag(layer_tag=88+channel_index, step_token=cur_step))
                             req_send_check.append(req_isend)
                             channel_index-=1
                             mod_counters_[mod_avail_index]+=1
                         elif mod_counters_[mod_avail_index] == 1:
                             grads = tmp_grad_weight.data.numpy().astype(np.float64)
-                            req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                            #req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                            req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, generate_tag(layer_tag=88+channel_index, step_token=cur_step))
                             req_send_check.append(req_isend)
                             channel_index-=1
                             mod_counters_[mod_avail_index]+=1
@@ -305,7 +325,8 @@ class ResNetSplit(nn.Module):
             if pd.isnull(self.full_modules[mod_avail_index].bias):
                 tmp_grad_weight = self.full_modules[mod_avail_index].weight.grad
                 grads = tmp_grad_weight.data.numpy().astype(np.float64)
-                req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                #req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, generate_tag(layer_tag=88+channel_index, step_token=cur_step))
                 req_send_check.append(req_isend)
                 channel_index-=1
                 mod_counters_[mod_avail_index]=2
@@ -317,13 +338,15 @@ class ResNetSplit(nn.Module):
                 # we always send bias first
                 if mod_counters_[mod_avail_index] == 0:
                     grads = tmp_grad_bias.data.numpy().astype(np.float64)
-                    req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                    #req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                    req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, generate_tag(layer_tag=88+channel_index, step_token=cur_step))
                     req_send_check.append(req_isend)
                     channel_index-=1
                     mod_counters_[mod_avail_index]+=1
                 elif mod_counters_[mod_avail_index] == 1:
                     grads = tmp_grad_weight.data.numpy().astype(np.float64)
-                    req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                    #req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                    req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, generate_tag(layer_tag=88+channel_index, step_token=cur_step))
                     req_send_check.append(req_isend)
                     channel_index-=1
                     mod_counters_[mod_avail_index]+=1
