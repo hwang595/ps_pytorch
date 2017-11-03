@@ -179,7 +179,7 @@ class DistributedWorker(NN_Trainer):
             #req_send_check, killed=self.network.backward_signal_kill(logits_1.grad, communicator=self.comm, req_send_check=req_send_check, cur_step=self.cur_step)
             
             # Try Timeout killing strategy this time:
-            print("Worker {} entering backward process".foramt(self.rank))
+            print("Worker {} entering backward process".format(self.rank))
             try:
                 req_send_check = self.network.backward_timeout_kill(logits_1.grad, communicator=self.comm, req_send_check=req_send_check, cur_step=self.cur_step)
             except StopIteration:
