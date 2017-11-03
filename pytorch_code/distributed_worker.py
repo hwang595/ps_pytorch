@@ -175,6 +175,7 @@ class DistributedWorker(NN_Trainer):
             init_grad_data = np.sum(init_grad_data, axis=0).astype(np.float64)
             # send grad to parameter server
             #req_isend = self.comm.Isend([init_grad_data, MPI.DOUBLE], dest=0, tag=88+self._param_idx)
+            print("Worker {}, Tag Encoded: {}".format(self.rank, generate_tag(layer_tag=88+self._param_idx, step_token=self.cur_step)))
             req_isend = self.comm.Isend([init_grad_data, MPI.DOUBLE], dest=0, tag=generate_tag(layer_tag=88+self._param_idx, step_token=self.cur_step))
             req_send_check.append(req_isend)
             
