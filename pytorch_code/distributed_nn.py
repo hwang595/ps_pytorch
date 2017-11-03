@@ -24,8 +24,10 @@ from nn_ops import NN_Trainer, accuracy
 from data_loader_ops.my_data_loader import DataLoader
 
 # normal version
-from distributed_worker import *
-from sync_replicas_master_nn import *
+#from distributed_worker import *
+#from sync_replicas_master_nn import *
+from distributed_worker_normal import *
+from sync_replicas_master_nn_normal import *
 
 #for tmp solution
 from mnist import mnist
