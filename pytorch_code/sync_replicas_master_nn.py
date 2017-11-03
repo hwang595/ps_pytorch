@@ -184,7 +184,8 @@ class SyncReplicasMaster_NN(NN_Trainer):
 						self._first_grad_received=True
 						grad_gather_start_time = time.time()
 
-					layer_index = status.tag-88
+					#layer_index = status.tag-88
+					layer_idx = layer_tag-88
 					received_grad=self.grad_accumulator.gradient_aggregator[layer_index][status.source-1]
 					
 					# do gradient shape check here
