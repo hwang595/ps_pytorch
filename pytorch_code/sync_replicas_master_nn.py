@@ -157,8 +157,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 					status, req_index=self.get_waitany_status(gradient_fetch_requests)
 				except StopIteration:
 					print("Master time out!")
-                	break
-
+					break
 				received_req_indices.append(req_index)
 				
 				if status.tag-88 in self.grad_accumulator.model_index_range:
