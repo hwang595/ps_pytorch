@@ -150,8 +150,10 @@ class SyncReplicasMaster_NN(NN_Trainer):
 			# in timeout strategy we also make a fake time out on master process
 			time_out_init_time = time.time()
 			while not enough_gradients_received:
-				status = MPI.Status()
-				req_index=MPI.Request.Waitany(requests=gradient_fetch_requests, status=status)
+
+				#status = MPI.Status()
+				#req_index=MPI.Request.Waitany(requests=gradient_fetch_requests, status=status)
+				self.get_waitany_status(gradient_fetch_requests)
 				received_req_indices.append(req_index)
 
 				# naive timeout on master
@@ -330,3 +332,9 @@ class SyncReplicasMaster_NN(NN_Trainer):
 			req=self.comm.isend(-1, dest=worker_idx, tag=77)
 			kill_req_list.append(req)
 		return kill_req_list
+
+	@timeout_decorator.timeout(5, timeout_exception=StopIteration)
+	def get_waitany_status(self, requests):
+		status = MPI.Status()
+		req_index=MPI.Request.Waitany(requests=gradient_fetch_requests, status=status)
+		return req_index

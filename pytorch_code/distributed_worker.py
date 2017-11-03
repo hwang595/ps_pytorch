@@ -185,8 +185,6 @@ class DistributedWorker(NN_Trainer):
                     req.wait()
             except StopIteration:
                 print("Worker: {} Timeout".format(self.rank))
-                for req in self.network.killed_request_list:
-                    req.Cancel()
             
             # Normal backward
             #req_send_check=self.network.backward(logits_1.grad, communicator=self.comm, req_send_check=req_send_check)
