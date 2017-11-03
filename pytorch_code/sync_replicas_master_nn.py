@@ -161,6 +161,9 @@ class SyncReplicasMaster_NN(NN_Trainer):
 					break
 				if req_index != MPI_TEST_NULL_CODE_:
 					received_req_indices.append(req_index)
+
+				if time.time() - time_out_init_time > 25:
+					break
 				
 				if status.tag-88 in self.grad_accumulator.model_index_range:
 					if not self._first_grad_received:
@@ -335,7 +338,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 			kill_req_list.append(req)
 		return kill_req_list
 
-	@timeout_decorator.timeout(15, timeout_exception=StopIteration)
+	@timeout_decorator.timeout(5, timeout_exception=StopIteration)
 	def get_waitany_status(self, requests):
 		status = MPI.Status()
 		#req_index=MPI.Request.Waitany(requests=requests, status=status)
