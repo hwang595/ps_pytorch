@@ -100,6 +100,8 @@ class SyncReplicasMaster_NN(NN_Trainer):
 		self._first_grad_received = False
 		# represent the `k` in our settings
 		self._should_kill_threshold = kwargs['kill_threshold']
+		self._expected_grad_to_recv = kwargs['kill_threshold']
+		self._master_timeout_interval = 3
 
 	def build_model(self):
 		# build network
@@ -126,6 +128,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 		for i in range(1, MAX_NUM_ITERATIONS):
 			self._first_grad_received = False
 			enough_gradients_received = False
+			self._master_timeout_start = None
 
 			# workers should be killed at this iteration, this can change from iteration to iteration
 			workers_should_kill = []
@@ -145,19 +148,18 @@ class SyncReplicasMaster_NN(NN_Trainer):
 			gradient_fetch_requests=self.async_fetch_gradient_start()
 
 			received_req_indices = []
-
 			# wait for enough gradients to be aggregated:
-
-			# in timeout strategy we also make a fake time out on master process
-			time_out_init_time = time.time()
 			while not enough_gradients_received:
-
 				#status = MPI.Status()
 				#req_index=MPI.Request.Waitany(requests=gradient_fetch_requests, status=status)
 				status, req_index=self.get_waitany_status(gradient_fetch_requests)
 
 				if req_index != MPI_TEST_NULL_CODE_:
 					received_req_indices.append(req_index)
+
+				# implement master timeout strategy
+				if self.check_timeout_flag():
+					break
 				
 				if status.tag-88 in self.grad_accumulator.model_index_range:
 					if not self._first_grad_received:
@@ -205,13 +207,17 @@ class SyncReplicasMaster_NN(NN_Trainer):
 
 					##########################################################################################################
 					
-					print(self.grad_accumulator.gradient_aggregate_counter)
-					print('---------------------------------------------------------------------')
+					#print(self.grad_accumulator.gradient_aggregate_counter)
+					#print('---------------------------------------------------------------------')
 				
 				enough_gradients_received = True
 				for j_idx, j in enumerate(self.grad_accumulator.gradient_aggregate_counter):
 					if j_idx == 0:
 						enough_gradients_received = enough_gradients_received and (j >= self._should_kill_threshold)
+						# we look ahead here to consider if not enough gradients are sending to master
+						if j >= self._expected_grad_to_recv-2:
+							# TODO(hwang): check to see if this interval is appropriate
+							self._master_timeout_start = time.time()
 					else:
 						enough_gradients_received = enough_gradients_received and (j >= self._num_grad_to_collect)
 
@@ -337,3 +343,10 @@ class SyncReplicasMaster_NN(NN_Trainer):
 		#req_index=MPI.Request.Waitany(requests=requests, status=status)
 		req_index, flag=MPI.Request.Testany(requests=requests, status=status)
 		return status, req_index
+
+	def check_timeout_flag(self):
+		timeout_flag = False
+		if self._master_timeout_start is not None:
+			if time.time() - self._master_timeout_start > self._master_timeout_interval:
+				timeout_flag = True
+		return timeout_flag
