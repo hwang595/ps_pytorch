@@ -173,8 +173,8 @@ class SyncReplicasMaster_NN(NN_Trainer):
 				# implement master timeout strategy
 				if self.check_timeout_flag():
 					break
-				
-				layer_tag, step_token = decode_tag(status_tag)
+				if status.tag > 0:
+					layer_tag, step_token = decode_tag(status.tag)
 				#if status.tag-88 in self.grad_accumulator.model_index_range:
 				if layer_tag-88 in self.grad_accumulator.model_index_range:
 					if not self._first_grad_received:
