@@ -141,6 +141,8 @@ class ResNetSplit(nn.Module):
         self.avg_pool2d = nn.AvgPool2d(kernel_size=4)
         self._init_channel_index = self.count_channel_index()
 
+        self.killed_request_list = []
+
     @property
     def fetch_init_channel_index(self):
         return self._init_channel_index
@@ -448,6 +450,9 @@ class ResNetSplit(nn.Module):
         mod_avail_index = len(self.full_modules)-1
         channel_index = self._init_channel_index-2
         mod_counters_ = [0]*len(self.full_modules)
+        
+        # meset request list of killed workers
+        self.killed_request_list = []
         for i, output in reversed(list(enumerate(self.output))):
             # send layer only after the last layer is received
             req_send_check[-1].wait()
@@ -460,6 +465,7 @@ class ResNetSplit(nn.Module):
                     grads = tmp_grad.data.numpy().astype(np.float64)
                     req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
                     req_send_check.append(req_isend)
+                    self.killed_request_list.append(req_isend)
                     # update counters
                     mod_avail_index-=1
                     channel_index-=1
@@ -480,6 +486,7 @@ class ResNetSplit(nn.Module):
                         grads = tmp_grad_weight.data.numpy().astype(np.float64)
                         req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
                         req_send_check.append(req_isend)
+                        self.killed_request_list.append(req_isend)
                         channel_index-=1
                         mod_counters_[mod_avail_index]=2
                         # update counters
@@ -496,12 +503,14 @@ class ResNetSplit(nn.Module):
                             grads = tmp_grad_bias.data.numpy().astype(np.float64)
                             req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
                             req_send_check.append(req_isend)
+                            self.killed_request_list.append(req_isend)
                             channel_index-=1
                             mod_counters_[mod_avail_index]+=1
                         elif mod_counters_[mod_avail_index] == 1:
                             grads = tmp_grad_weight.data.numpy().astype(np.float64)
                             req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
                             req_send_check.append(req_isend)
+                            self.killed_request_list.append(req_isend)
                             channel_index-=1
                             mod_counters_[mod_avail_index]+=1
                             # update counters
@@ -516,6 +525,7 @@ class ResNetSplit(nn.Module):
                 grads = tmp_grad_weight.data.numpy().astype(np.float64)
                 req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
                 req_send_check.append(req_isend)
+                self.killed_request_list.append(req_isend)
                 channel_index-=1
                 mod_counters_[mod_avail_index]=2
                 # update counters
@@ -528,12 +538,14 @@ class ResNetSplit(nn.Module):
                     grads = tmp_grad_bias.data.numpy().astype(np.float64)
                     req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
                     req_send_check.append(req_isend)
+                    self.killed_request_list.append(req_isend)
                     channel_index-=1
                     mod_counters_[mod_avail_index]+=1
                 elif mod_counters_[mod_avail_index] == 1:
                     grads = tmp_grad_weight.data.numpy().astype(np.float64)
                     req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
                     req_send_check.append(req_isend)
+                    self.killed_request_list.append(req_isend)
                     channel_index-=1
                     mod_counters_[mod_avail_index]+=1
                     # update counters
