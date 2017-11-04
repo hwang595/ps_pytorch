@@ -139,6 +139,7 @@ class Bottleneck(nn.Module):
 class ResNetSplit(nn.Module):
     def __init__(self, block, num_blocks, kill_threshold, num_classes=10):
         super(ResNetSplit, self).__init__()
+        global TIMEOUT_THRESHOLD_
         self.in_planes = 64
         self.full_modules = []
 
