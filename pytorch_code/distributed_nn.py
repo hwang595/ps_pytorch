@@ -88,7 +88,7 @@ if __name__ == "__main__":
         train_set = Cifar10Dataset(dataset=cifar10_data.train, transform=transforms.ToTensor())
 
     kwargs_master = {'batch_size':args.batch_size, 'learning_rate':args.lr, 'max_epochs':args.epochs, 'momentum':args.momentum, 'network':args.network,
-                'comm_method':args.comm_type, 'kill_threshold': args.num_aggregate}
+                'comm_method':args.comm_type, 'kill_threshold': args.num_aggregate, 'timeout_threshold':args.kill_threshold}
 
     kwargs_worker = {'batch_size':args.batch_size, 'learning_rate':args.lr, 'max_epochs':args.epochs, 'momentum':args.momentum, 'network':args.network,
                 'comm_method':args.comm_type, 'kill_threshold':args.kill_threshold}

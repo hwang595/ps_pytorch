@@ -90,6 +90,7 @@ class SyncReplicasMasterNormal_NN(NN_Trainer):
 		self.momentum = kwargs['momentum']
 		self.network_config = kwargs['network']
 		self.comm_type = kwargs['comm_method']
+		self._timeout_threshold = kwargs['timeout_threshold']
 
 		self._num_grad_to_collect = self.world_size - 1
 		# used to aggregate tmp gradients, the length is the same as # of fc layer 
@@ -102,7 +103,7 @@ class SyncReplicasMasterNormal_NN(NN_Trainer):
 		if self.network_config == "LeNet":
 			self.network=LeNetSplit()
 		elif self.network_config == "ResNet18":
-			self.network=ResNetSplit18()
+			self.network=ResNetSplit18(self._timeout_threshold)
 		elif self.network_config == "ResNet34":
 			self.network=ResNetSplit34()
 		  

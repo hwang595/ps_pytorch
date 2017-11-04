@@ -118,13 +118,14 @@ class SyncReplicasMaster_NN(NN_Trainer):
 		self._should_kill_threshold = kwargs['kill_threshold']
 		self._expected_grad_to_recv = kwargs['kill_threshold']
 		self._master_timeout_interval = 8
+		self._timeout_threshold = kwargs['timeout_threshold']
 
 	def build_model(self):
 		# build network
 		if self.network_config == "LeNet":
 			self.network=LeNetSplit()
 		elif self.network_config == "ResNet18":
-			self.network=ResNetSplit18()
+			self.network=ResNetSplit18(self._timeout_threshold)
 		elif self.network_config == "ResNet34":
 			self.network=ResNetSplit34()
 
