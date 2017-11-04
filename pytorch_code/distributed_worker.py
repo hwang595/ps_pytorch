@@ -184,8 +184,7 @@ class DistributedWorker(NN_Trainer):
             
             # Try Timeout killing strategy this time:
             try:
-            #    req_send_check = self.network.backward_timeout_kill(logits_1.grad, communicator=self.comm, req_send_check=req_send_check, cur_step=self.cur_step)
-                req_send_check = self.network.backward_timeout_caller(logits_1.grad, communicator=self.comm, req_send_check=req_send_check, cur_step=self.cur_step)
+                req_send_check = self.network.backward_timeout_kill(logits_1.grad, communicator=self.comm, req_send_check=req_send_check, cur_step=self.cur_step)
                 req_send_check[-1].wait()
             except StopIteration:
                 print("Worker: {} Timeout".format(self.rank))

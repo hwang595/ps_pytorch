@@ -20,6 +20,7 @@ import timeout_decorator
 from mpi4py import MPI
 
 LAYER_DIGITS= int(1e+3)
+TIMEOUT_THRESHOLD_=10
 
 def generate_tag(layer_tag, step_token):
     '''
@@ -159,7 +160,7 @@ class ResNetSplit(nn.Module):
         self.avg_pool2d = nn.AvgPool2d(kernel_size=4)
         self._init_channel_index = self.count_channel_index()
         self._timeout_threshold = kill_threshold
-
+        TIMEOUT_THRESHOLD_ = self._timeout_threshold
         self.killed_request_list = []
 
     @property
@@ -567,121 +568,119 @@ class ResNetSplit(nn.Module):
             killed = True
         return req_send_check, killed
 
-    def backward_timeout_caller(self, g, communicator, req_send_check, cur_step):
-        @timeout_decorator.timeout(self._timeout_threshold, timeout_exception=StopIteration)
-        def backward_timeout_kill(self, g, communicator, req_send_check, cur_step):
-            mod_avail_index = len(self.full_modules)-1
-            channel_index = self._init_channel_index-2
-            mod_counters_ = [0]*len(self.full_modules)
+    @timeout_decorator.timeout(TIMEOUT_THRESHOLD_, timeout_exception=StopIteration)
+    def backward_timeout_kill(self, g, communicator, req_send_check, cur_step):
+        mod_avail_index = len(self.full_modules)-1
+        channel_index = self._init_channel_index-2
+        mod_counters_ = [0]*len(self.full_modules)
 
-            # meset request list of killed workers
-            self.killed_request_list = []
-            for i, output in reversed(list(enumerate(self.output))):
-                # send layer only after the last layer is received
-                req_send_check[-1].wait()
-                if i == (len(self.output) - 1):
-                    # for last node, use g
-                    output.backward(g)
-                    # get gradient here after some sanity checks:
-                    tmp_grad = self.full_modules[mod_avail_index].weight.grad
-                    if not pd.isnull(tmp_grad):
-                        grads = tmp_grad.data.numpy().astype(np.float64)
-                        #req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
-                        req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=generate_tag(layer_tag=88+channel_index, step_token=cur_step))
-                        req_send_check.append(req_isend)
-                        #self.killed_request_list.append(req_isend)
-                        # update counters
-                        mod_avail_index-=1
-                        channel_index-=1
-                    else:
-                        continue
-                else:
-                    if output.size() == self.input[i+1].grad.size():
-                        output.backward(self.input[i+1].grad.data)
-                    else:
-                        tmp_grad_output = self.input[i+1].grad.view(output.size())
-                        output.backward(tmp_grad_output)
-
-                    # since in resnet we do not use bias weight for conv layer
-                    if pd.isnull(self.full_modules[mod_avail_index].bias):
-                        tmp_grad_weight = self.full_modules[mod_avail_index].weight.grad
-
-                        if not pd.isnull(tmp_grad_weight):
-                            grads = tmp_grad_weight.data.numpy().astype(np.float64)
-                            #req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
-                            req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=generate_tag(layer_tag=88+channel_index, step_token=cur_step))
-                            req_send_check.append(req_isend)
-                            #self.killed_request_list.append(req_isend)
-                            channel_index-=1
-                            mod_counters_[mod_avail_index]=2
-                            # update counters
-                            mod_avail_index-=1
-                        else:
-                            continue
-                    else:
-                        tmp_grad_weight = self.full_modules[mod_avail_index].weight.grad
-                        tmp_grad_bias = self.full_modules[mod_avail_index].bias.grad
-
-                        if not pd.isnull(tmp_grad_weight) and not pd.isnull(tmp_grad_bias):
-                            # we always send bias first
-                            if mod_counters_[mod_avail_index] == 0:
-                                grads = tmp_grad_bias.data.numpy().astype(np.float64)
-                                #req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
-                                req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=generate_tag(layer_tag=88+channel_index, step_token=cur_step))
-                                req_send_check.append(req_isend)
-                                #self.killed_request_list.append(req_isend)
-                                channel_index-=1
-                                mod_counters_[mod_avail_index]+=1
-                            elif mod_counters_[mod_avail_index] == 1:
-                                grads = tmp_grad_weight.data.numpy().astype(np.float64)
-                                #req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
-                                req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=generate_tag(layer_tag=88+channel_index, step_token=cur_step))
-                                req_send_check.append(req_isend)
-                                #self.killed_request_list.append(req_isend)
-                                channel_index-=1
-                                mod_counters_[mod_avail_index]+=1
-                                # update counters
-                                mod_avail_index-=1
-                        else:
-                            continue
-            # handle the remaining gradients here to send to parameter server
-            while channel_index >= 0:
-                req_send_check[-1].wait()
-                if pd.isnull(self.full_modules[mod_avail_index].bias):
-                    tmp_grad_weight = self.full_modules[mod_avail_index].weight.grad
-                    grads = tmp_grad_weight.data.numpy().astype(np.float64)
+        # meset request list of killed workers
+        self.killed_request_list = []
+        for i, output in reversed(list(enumerate(self.output))):
+            # send layer only after the last layer is received
+            req_send_check[-1].wait()
+            if i == (len(self.output) - 1):
+                # for last node, use g
+                output.backward(g)
+                # get gradient here after some sanity checks:
+                tmp_grad = self.full_modules[mod_avail_index].weight.grad
+                if not pd.isnull(tmp_grad):
+                    grads = tmp_grad.data.numpy().astype(np.float64)
                     #req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
                     req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=generate_tag(layer_tag=88+channel_index, step_token=cur_step))
                     req_send_check.append(req_isend)
                     #self.killed_request_list.append(req_isend)
-                    channel_index-=1
-                    mod_counters_[mod_avail_index]=2
                     # update counters
                     mod_avail_index-=1
+                    channel_index-=1
                 else:
+                    continue
+            else:
+                if output.size() == self.input[i+1].grad.size():
+                    output.backward(self.input[i+1].grad.data)
+                else:
+                    tmp_grad_output = self.input[i+1].grad.view(output.size())
+                    output.backward(tmp_grad_output)
+
+                # since in resnet we do not use bias weight for conv layer
+                if pd.isnull(self.full_modules[mod_avail_index].bias):
                     tmp_grad_weight = self.full_modules[mod_avail_index].weight.grad
-                    tmp_grad_bias = self.full_modules[mod_avail_index].bias.grad
-                    # we always send bias first
-                    if mod_counters_[mod_avail_index] == 0:
-                        grads = tmp_grad_bias.data.numpy().astype(np.float64)
-                        #req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
-                        req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=generate_tag(layer_tag=88+channel_index, step_token=cur_step))
-                        req_send_check.append(req_isend)
-                        #self.killed_request_list.append(req_isend)
-                        channel_index-=1
-                        mod_counters_[mod_avail_index]+=1
-                    elif mod_counters_[mod_avail_index] == 1:
+
+                    if not pd.isnull(tmp_grad_weight):
                         grads = tmp_grad_weight.data.numpy().astype(np.float64)
                         #req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
                         req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=generate_tag(layer_tag=88+channel_index, step_token=cur_step))
                         req_send_check.append(req_isend)
                         #self.killed_request_list.append(req_isend)
                         channel_index-=1
-                        mod_counters_[mod_avail_index]+=1
+                        mod_counters_[mod_avail_index]=2
                         # update counters
                         mod_avail_index-=1
-            return req_send_check
-        self.backward_timeout_kill(g=g, communicator=communicator, req_send_check=req_send_check, cur_step=cur_step)
+                    else:
+                        continue
+                else:
+                    tmp_grad_weight = self.full_modules[mod_avail_index].weight.grad
+                    tmp_grad_bias = self.full_modules[mod_avail_index].bias.grad
+
+                    if not pd.isnull(tmp_grad_weight) and not pd.isnull(tmp_grad_bias):
+                        # we always send bias first
+                        if mod_counters_[mod_avail_index] == 0:
+                            grads = tmp_grad_bias.data.numpy().astype(np.float64)
+                            #req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                            req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=generate_tag(layer_tag=88+channel_index, step_token=cur_step))
+                            req_send_check.append(req_isend)
+                            #self.killed_request_list.append(req_isend)
+                            channel_index-=1
+                            mod_counters_[mod_avail_index]+=1
+                        elif mod_counters_[mod_avail_index] == 1:
+                            grads = tmp_grad_weight.data.numpy().astype(np.float64)
+                            #req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                            req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=generate_tag(layer_tag=88+channel_index, step_token=cur_step))
+                            req_send_check.append(req_isend)
+                            #self.killed_request_list.append(req_isend)
+                            channel_index-=1
+                            mod_counters_[mod_avail_index]+=1
+                            # update counters
+                            mod_avail_index-=1
+                    else:
+                        continue
+        # handle the remaining gradients here to send to parameter server
+        while channel_index >= 0:
+            req_send_check[-1].wait()
+            if pd.isnull(self.full_modules[mod_avail_index].bias):
+                tmp_grad_weight = self.full_modules[mod_avail_index].weight.grad
+                grads = tmp_grad_weight.data.numpy().astype(np.float64)
+                #req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=generate_tag(layer_tag=88+channel_index, step_token=cur_step))
+                req_send_check.append(req_isend)
+                #self.killed_request_list.append(req_isend)
+                channel_index-=1
+                mod_counters_[mod_avail_index]=2
+                # update counters
+                mod_avail_index-=1
+            else:
+                tmp_grad_weight = self.full_modules[mod_avail_index].weight.grad
+                tmp_grad_bias = self.full_modules[mod_avail_index].bias.grad
+                # we always send bias first
+                if mod_counters_[mod_avail_index] == 0:
+                    grads = tmp_grad_bias.data.numpy().astype(np.float64)
+                    #req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                    req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=generate_tag(layer_tag=88+channel_index, step_token=cur_step))
+                    req_send_check.append(req_isend)
+                    #self.killed_request_list.append(req_isend)
+                    channel_index-=1
+                    mod_counters_[mod_avail_index]+=1
+                elif mod_counters_[mod_avail_index] == 1:
+                    grads = tmp_grad_weight.data.numpy().astype(np.float64)
+                    #req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                    req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=generate_tag(layer_tag=88+channel_index, step_token=cur_step))
+                    req_send_check.append(req_isend)
+                    #self.killed_request_list.append(req_isend)
+                    channel_index-=1
+                    mod_counters_[mod_avail_index]+=1
+                    # update counters
+                    mod_avail_index-=1
+        return req_send_check
     '''
     def backward(self, g):
         for i, output in reversed(list(enumerate(self.output))):
