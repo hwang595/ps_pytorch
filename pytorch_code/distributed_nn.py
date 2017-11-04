@@ -103,7 +103,7 @@ if __name__ == "__main__":
         master_fc_nn.train()
         print("Done sending messages to workers!")
     else:
-        if args.mode == "normal:"
+        if args.mode == "normal":
             worker_fc_nn = DistributedWorker(comm=comm, **kwargs_worker)
         elif args.mode == "kill":
             worker_fc_nn = DistributedWorkerNormal(comm=comm, **kwargs_worker)
