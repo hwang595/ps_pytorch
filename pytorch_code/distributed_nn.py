@@ -95,9 +95,9 @@ if __name__ == "__main__":
 
     if rank == 0:
         if args.mode == "normal":
-            master_fc_nn = SyncReplicasMaster_NN(comm=comm, **kwargs_master)
-        elif args.mode == "kill":
             master_fc_nn = SyncReplicasMasterNormal_NN(comm=comm, **kwargs_master)
+        elif args.mode == "kill":
+            master_fc_nn = SyncReplicasMaster_NN(comm=comm, **kwargs_master)
         master_fc_nn.build_model()
         print("I am the master: the world size is {}, cur step: {}".format(master_fc_nn.world_size, master_fc_nn.cur_step))
         master_fc_nn.train()
