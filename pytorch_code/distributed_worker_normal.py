@@ -53,7 +53,7 @@ class ModelBuffer(object):
             self.layer_cur_step.append(0)
 
 
-class DistributedWorker(NN_Trainer):
+class DistributedWorkerNormal(NN_Trainer):
     def __init__(self, comm, **kwargs):
         self.comm = comm   # get MPI communicator object
         self.world_size = comm.Get_size() # total number of processes
@@ -68,6 +68,7 @@ class DistributedWorker(NN_Trainer):
         self.lr = kwargs['learning_rate']
         self.network_config = kwargs['network']
         self.comm_type = kwargs['comm_method']
+        self.kill_threshold = kwargs['kill_threshold']
 
         # this one is going to be used to avoid fetch the weights for multiple times
         self._layer_cur_step = []
@@ -77,7 +78,7 @@ class DistributedWorker(NN_Trainer):
         if self.network_config == "LeNet":
             self.network=LeNetSplit()
         elif self.network_config == "ResNet18":
-            self.network=ResNetSplit18()
+            self.network=ResNetSplit18(self.kill_threshold)
         elif self.network_config == "ResNet34":
             self.network=ResNetSplit34()
 

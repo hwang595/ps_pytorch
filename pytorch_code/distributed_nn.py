@@ -23,9 +23,8 @@ from torchvision import datasets, transforms
 from nn_ops import NN_Trainer, accuracy
 from data_loader_ops.my_data_loader import DataLoader
 
-# normal version
-#from distributed_worker import *
-#from sync_replicas_master_nn import *
+from distributed_worker import *
+from sync_replicas_master_nn import *
 from distributed_worker_normal import *
 from sync_replicas_master_nn_normal import *
 
@@ -59,6 +58,10 @@ def add_fit_args(parser):
                         help='how many batches to wait before logging training status')
     parser.add_argument('--network', type=str, default='LeNet', metavar='N',
                         help='which kind of network we are going to use, support LeNet and ResNet currently')
+    parser.add_argument('--mode', type=str, default='normal', metavar='N',
+                        help='determine if we kill the stragglers or just implement normal training')
+    parser.add_argument('--kill-threshold', type=float, default=7.0, metavar='KT',
+                        help='timeout threshold which triggers the killing process (default: 7s)')
     parser.add_argument('--dataset', type=str, default='MNIST', metavar='N',
                         help='which dataset used in training, MNIST and Cifar10 supported currently')
     parser.add_argument('--comm-type', type=str, default='Bcast', metavar='N',
@@ -88,16 +91,22 @@ if __name__ == "__main__":
                 'comm_method':args.comm_type, 'kill_threshold': args.num_aggregate}
 
     kwargs_worker = {'batch_size':args.batch_size, 'learning_rate':args.lr, 'max_epochs':args.epochs, 'momentum':args.momentum, 'network':args.network,
-                'comm_method':args.comm_type}
+                'comm_method':args.comm_type, 'kill_threshold':args.kill_threshold}
 
     if rank == 0:
-        master_fc_nn = SyncReplicasMaster_NN(comm=comm, **kwargs_master)
+        if args.mode == "normal":
+            master_fc_nn = SyncReplicasMasterNormal_NN(comm=comm, **kwargs_master)
+        elif args.mode == "kill":
+            master_fc_nn = SyncReplicasMaster_NN(comm=comm, **kwargs_master)
         master_fc_nn.build_model()
         print("I am the master: the world size is {}, cur step: {}".format(master_fc_nn.world_size, master_fc_nn.cur_step))
         master_fc_nn.train()
         print("Done sending messages to workers!")
     else:
-        worker_fc_nn = DistributedWorker(comm=comm, **kwargs_worker)
+        if args.mode == "normal:"
+            worker_fc_nn = DistributedWorker(comm=comm, **kwargs_worker)
+        elif args.mode == "kill":
+            worker_fc_nn = DistributedWorkerNormal(comm=comm, **kwargs_worker)
         worker_fc_nn.build_model()
         print("I am worker: {} in all {} workers, next step: {}".format(worker_fc_nn.rank, worker_fc_nn.world_size-1, worker_fc_nn.next_step))
         worker_fc_nn.train(train_loader=train_set)

@@ -80,7 +80,7 @@ class GradientAccumulator(object):
 
 
 
-class SyncReplicasMaster_NN(NN_Trainer):
+class SyncReplicasMasterNormal_NN(NN_Trainer):
 	def __init__(self, comm, **kwargs):
 		'''master node here, no rank needed since the rank will always be 0 for master node'''
 		self.comm = comm   # get MPI communicator object
