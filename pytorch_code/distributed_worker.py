@@ -134,13 +134,16 @@ class DistributedWorker(NN_Trainer):
             first = False
             print("Rank of this node: {}, Current step: {}".format(self.rank, self.cur_step))
 
-            # TODO(hwang): return layer request here and do weight before the forward step begins, rather than implement
-            # the wait() in the fetch function
-            try:
-                with Timeout(seconds=self.kill_threshold):
-                    fetch_weight_duration, forward_duration, backward_duration=self.training_process(train_loader)
-            except TimeoutError:
-                print("Worker: {} Timeout".format(self.rank))
+
+            # only consider triggering the killing process after the first iteration
+            if self.cur_step > 1:
+                try:
+                    with Timeout(seconds=self.kill_threshold):
+                        fetch_weight_duration, forward_duration, backward_duration=self.training_process(train_loader)
+                except TimeoutError:
+                    print("Worker: {} Timeout".format(self.rank))
+            else:
+                fetch_weight_duration, forward_duration, backward_duration=self.training_process(train_loader)
 
             # on the end of a certain iteration
             print('Worker: {}, Cur Step: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, FetchWeight: {:.4f}, Forward: {:.4f}, Backward: {:.4f}'.format(self.rank,
