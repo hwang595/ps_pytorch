@@ -101,17 +101,17 @@ class DistributedWorker(NN_Trainer):
         assert(self.cur_step == STEP_START_)
 
         # number of batches in one epoch
-        num_batch_per_epoch = len(train_loader) / self.batch_size
-        batch_idx = -1
-        epoch_idx = 0
-        epoch_avg_loss = 0
-        iteration_last_step=0
-        iter_start_time=0
+        self._num_batch_per_epoch = len(train_loader) / self.batch_size
+        self._batch_idx = -1
+        self._epoch_idx = 0
+        self._epoch_avg_loss = 0
+        self._iteration_last_step=0
+        self._iter_start_time=0
 
         # init time costs here in case non of these are assigned
-        fetch_weight_duration=0
-        forward_duration=0
-        backward_duration=0
+        self._fetch_weight_duration=0
+        self._forward_duration=0
+        self._backward_duration=0
 
         first = True
 
@@ -130,7 +130,6 @@ class DistributedWorker(NN_Trainer):
                 continue
 
             # the real start point of this iteration
-            iteration_last_step = time.time() - iter_start_time
             iter_start_time = time.time()
             first = False
             print("Rank of this node: {}, Current step: {}".format(self.rank, self.cur_step))
@@ -139,93 +138,16 @@ class DistributedWorker(NN_Trainer):
             # the wait() in the fetch function
             try:
                 with Timeout(seconds=self.kill_threshold):
-                    self.training_process()
-                except TimeoutError:
-                    print("Worker: {} Timeout".format(self.rank))
-            '''
-            fetch_weight_start_time = time.time()
-            if self.comm_type == "Bcast":
-                self.async_fetch_weights_bcast()
-            elif self.comm_type == "Async":
-                self.async_fetch_weights_async()
-
-            fetch_weight_duration = time.time() - fetch_weight_start_time
-            time_point_log = datetime.now()
-
-            # start the normal training process
-            train_image_batch, train_label_batch = train_loader.next_batch(batch_size=self.batch_size)
-            X_batch, y_batch = Variable(train_image_batch.float()), Variable(train_label_batch.long())
-
-            # manage batch index manually
-            batch_idx += 1
-            self.optimizer.zero_grad()
-
-            if batch_idx == num_batch_per_epoch - 1:
-                batch_idx = 0
-                epoch_avg_loss /= num_batch_per_epoch
-                print("Average for epoch {} is {}".format(epoch_idx, epoch_avg_loss))
-                epoch_idx += 1
-                epoch_avg_loss = 0
-
-            # forward step
-            forward_start_time = time.time()
-            logits = self.network(X_batch)
-            logits_1 = Variable(logits.data, requires_grad=True)
-
-            loss = self.criterion(logits_1, y_batch)
-
-            epoch_avg_loss += loss.data[0]
-            forward_duration = time.time()-forward_start_time
-
-            # backward step
-            backward_start_time = time.time()
-            loss.backward()
-            # we can send the grad of this very first layer to parameter server right here before
-            # the chain rule is begining
-            req_send_check = []
-            init_grad_data = logits_1.grad.data.numpy()
-            init_grad_data = np.sum(init_grad_data, axis=0).astype(np.float64)
-            # send grad to parameter server
-            #req_isend = self.comm.Isend([init_grad_data, MPI.DOUBLE], dest=0, tag=88+self._param_idx)
-            req_isend = self.comm.Isend([init_grad_data, MPI.DOUBLE], dest=0, tag=generate_tag(layer_tag=88+self._param_idx, step_token=self.cur_step))
-            req_send_check.append(req_isend)
-            
-            # Try signal killing method here:
-            #req_send_check, killed=self.network.backward_signal_kill(logits_1.grad, communicator=self.comm, req_send_check=req_send_check, cur_step=self.cur_step)
-            
-            # Try Timeout killing strategy this time:
-            if self.cur_step == 1:
-                req_send_check=self.network.backward(logits_1.grad, communicator=self.comm, req_send_check=req_send_check, cur_step=self.cur_step)
-                req_send_check[-1].wait()
-            else:
-                try:
-                    req_send_check = self.network.backward_timeout_kill(logits_1.grad, communicator=self.comm, req_send_check=req_send_check, cur_step=self.cur_step)
-                    req_send_check[-1].wait()
-                except StopIteration:
-                    print("Worker: {} Timeout".format(self.rank))
-            # Normal backward
-            #req_send_check=self.network.backward(logits_1.grad, communicator=self.comm, req_send_check=req_send_check, cur_step=self.cur_step)
-            # test here, this should complete the backward communication process:
-            #req_send_check[-1].wait()
-            '''
-
-            '''
-            if not killed:
-                for req in req_send_check:
-                    req.wait()
-            else:
-                # if the worker is killed, we are trying to `cancel` their requests
-                for req in req_send_check:
-                    req.Cancel()
-            '''
-            backward_duration = time.time()-backward_start_time
+                    fetch_weight_duration, forward_duration, backward_duration=self.training_process(train_loader)
+            except TimeoutError:
+                print("Worker: {} Timeout".format(self.rank))
 
             # on the end of a certain iteration
             print('Worker: {}, Cur Step: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, FetchWeight: {:.4f}, Forward: {:.4f}, Backward: {:.4f}'.format(self.rank,
-                    self.cur_step, epoch_idx, batch_idx * self.batch_size, self.batch_size*num_batch_per_epoch, 
-                    (100. * (batch_idx * self.batch_size) / (self.batch_size*num_batch_per_epoch)), loss.data[0], time.time()-iter_start_time, fetch_weight_duration, forward_duration, backward_duration))
+                    self.cur_step, self._epoch_idx, self._batch_idx * self.batch_size, self.batch_size*self._num_batch_per_epoch, 
+                    (100. * (self._batch_idx * self.batch_size) / (self.batch_size*self._num_batch_per_epoch)), self._loss_data, time.time()-iter_start_time, fetch_weight_duration, forward_duration, backward_duration))
     
-    def training_process(self):
+    def training_process(self, train_loader):
         fetch_weight_start_time = time.time()
         if self.comm_type == "Bcast":
             self.async_fetch_weights_bcast()
@@ -240,15 +162,15 @@ class DistributedWorker(NN_Trainer):
         X_batch, y_batch = Variable(train_image_batch.float()), Variable(train_label_batch.long())
 
         # manage batch index manually
-        batch_idx += 1
+        self._batch_idx += 1
         self.optimizer.zero_grad()
 
-        if batch_idx == num_batch_per_epoch - 1:
-            batch_idx = 0
-            epoch_avg_loss /= num_batch_per_epoch
-            print("Average for epoch {} is {}".format(epoch_idx, epoch_avg_loss))
-            epoch_idx += 1
-            epoch_avg_loss = 0
+        if self._batch_idx == self._num_batch_per_epoch - 1:
+            self._batch_idx = 0
+            self._epoch_avg_loss /= self._num_batch_per_epoch
+            print("Average for epoch {} is {}".format(self._epoch_idx, self._epoch_avg_loss))
+            self._epoch_idx += 1
+            self._epoch_avg_loss = 0
 
         # forward step
         forward_start_time = time.time()
@@ -256,8 +178,9 @@ class DistributedWorker(NN_Trainer):
         logits_1 = Variable(logits.data, requires_grad=True)
 
         loss = self.criterion(logits_1, y_batch)
+        self._loss_data = loss.data[0]
 
-        epoch_avg_loss += loss.data[0]
+        self._epoch_avg_loss += loss.data[0]
         forward_duration = time.time()-forward_start_time
 
         # backward step
@@ -272,7 +195,6 @@ class DistributedWorker(NN_Trainer):
         #req_isend = self.comm.Isend([init_grad_data, MPI.DOUBLE], dest=0, tag=88+self._param_idx)
         req_isend = self.comm.Isend([init_grad_data, MPI.DOUBLE], dest=0, tag=generate_tag(layer_tag=88+self._param_idx, step_token=self.cur_step))
         req_send_check.append(req_isend)
-        
         # Try signal killing method here:
         #req_send_check, killed=self.network.backward_signal_kill(logits_1.grad, communicator=self.comm, req_send_check=req_send_check, cur_step=self.cur_step)
         
@@ -291,6 +213,8 @@ class DistributedWorker(NN_Trainer):
         # Normal backward
         req_send_check=self.network.backward(logits_1.grad, communicator=self.comm, req_send_check=req_send_check, cur_step=self.cur_step)
         req_send_check[-1].wait()
+        backward_duration = time.time()-backward_start_time
+        return fetch_weight_duration, forward_duration, backward_duration
 
     def init_recv_buf(self):
         self.model_recv_buf = ModelBuffer(self.network)
