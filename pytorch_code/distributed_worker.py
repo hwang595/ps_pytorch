@@ -109,9 +109,9 @@ class DistributedWorker(NN_Trainer):
         self._iter_start_time=0
 
         # init time costs here in case non of these are assigned
-        self._fetch_weight_duration=0
-        self._forward_duration=0
-        self._backward_duration=0
+        fetch_weight_duration=0
+        forward_duration=0
+        backward_duration=0
 
         first = True
 
