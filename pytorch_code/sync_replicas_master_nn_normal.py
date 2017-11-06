@@ -97,6 +97,8 @@ class SyncReplicasMasterNormal_NN(NN_Trainer):
 		self._grad_aggregate_buffer = []
 		self._model_shapes = []
 		self._first_grad_received = False
+		self._eval_freq = kwargs['eval_freq']
+		self._train_dir = kwargs['train_dir']
 
 	def build_model(self):
 		# build network
@@ -183,6 +185,9 @@ class SyncReplicasMasterNormal_NN(NN_Trainer):
 			# reset essential elements
 			self.meset_grad_buffer()
 			self.grad_accumulator.meset_everything()
+			# save model for validation in a pre-specified frequency
+			if self.cur_step/self._eval_freq == 0:
+				self._save_model(file_path=self._generate_model_path())
 			self.cur_step += 1
 
 	def init_model_shapes(self):
@@ -263,3 +268,11 @@ class SyncReplicasMasterNormal_NN(NN_Trainer):
 	def meset_grad_buffer(self):
 		for i in range(len(self._grad_aggregate_buffer)):
 			self._grad_aggregate_buffer[i] = np.zeros(self._grad_aggregate_buffer[i].shape)
+
+	def _generate_model_path(self):
+		return self._train_dir+"model_step_"+str(self.cur_step)
+
+	def _save_model(self, file_path):
+		with open(file_path, "wb") as f_:
+			torch.save(self.network, f_)
+		return

@@ -378,6 +378,6 @@ class SyncReplicasMaster_NN(NN_Trainer):
 		return self._train_dir+"model_step_"+str(self.cur_step)
 
 	def _save_model(self, file_path):
-        with open(file_path, "wb") as f_:
-            torch.save(self.network, f_)
-        return
+		with open(file_path, "wb") as f_:
+			torch.save(self.network, f_)
+		return
