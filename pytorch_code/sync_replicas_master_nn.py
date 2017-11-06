@@ -277,7 +277,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 			self.grad_accumulator.meset_everything()
 
 			# save model for validation in a pre-specified frequency
-			if self.cur_step/self._eval_freq == 0:
+			if self.cur_step%self._eval_freq == 0:
 				self._save_model(file_path=self._generate_model_path())
 			self.cur_step += 1
 
