@@ -99,6 +99,7 @@ class DistributedEvaluator(NN_Trainer):
             batch_counter_ += 1
         prec1 = prec1_counter_ / batch_counter_
         prec5 = prec5_counter_ / batch_counter_
+        self._epoch_counter = validation_loader.epochs_completed
         print('Testset Performance: Cur Step:{} Prec@1: {} Prec@5: {}'.format(self._next_step_to_fetch, prec1.numpy()[0], prec5.numpy()[0]))
 
     def _load_model(self, file_path):
