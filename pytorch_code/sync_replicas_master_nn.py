@@ -119,6 +119,8 @@ class SyncReplicasMaster_NN(NN_Trainer):
 		self._expected_grad_to_recv = kwargs['kill_threshold']
 		self._master_timeout_interval = 8
 		self._timeout_threshold = kwargs['timeout_threshold']
+		self._eval_freq = kwargs['eval_freq']
+		self._train_dir = kwargs['train_dir']
 
 	def build_model(self):
 		# build network
@@ -273,6 +275,10 @@ class SyncReplicasMaster_NN(NN_Trainer):
 			# reset essential elements
 			self.meset_grad_buffer()
 			self.grad_accumulator.meset_everything()
+
+			# save model for validation in a pre-specified frequency
+			if self.cur_step/self._eval_freq == 0:
+				self._save_model(file_path=self._generate_model_path())
 			self.cur_step += 1
 
 	def init_model_shapes(self):
@@ -313,12 +319,6 @@ class SyncReplicasMaster_NN(NN_Trainer):
 			#	if i != 0:
 			# try to see if collective communication is better here:
 			self.comm.Bcast([layer_to_send, MPI.DOUBLE], root=0)
-			#request_layers.append(request_workers)
-		# TODO(hwang): check to see if these `wait` calls are necessary here
-		#for req_l in request_layers:
-		#	for req_worker in req_l:
-		#		req_worker.wait()
-
 
 	def async_fetch_gradient_start(self):
 		'''make gradient fetch requests and return the request list'''
@@ -373,3 +373,11 @@ class SyncReplicasMaster_NN(NN_Trainer):
 			if time.time() - self._master_timeout_start > self._master_timeout_interval:
 				timeout_flag = True
 		return timeout_flag
+
+	def _generate_model_path(self):
+		return self._train_dir+"model_step_"+str(self.cur_step)
+
+	def _save_model(self, file_path):
+        with open(file_path, "wb") as f_:
+            torch.save(self.network, f_)
+        return

@@ -68,6 +68,10 @@ def add_fit_args(parser):
                         help='which kind of method we use during the mode fetching stage')
     parser.add_argument('--num-aggregate', type=int, default=5, metavar='N',
                         help='how many number of gradients we wish to gather at each iteration')
+    parser.add_argument('--eval-freq', type=int, default=50, metavar='N',
+                        help='it determines per how many step the model should be evaluated')
+    parser.add_argument('--train-dir', type=str, default='output/models/', metavar='N',
+                        help='directory to save the temp model during the training process for evaluation')
     args = parser.parse_args()
     return args
 
@@ -88,7 +92,8 @@ if __name__ == "__main__":
         train_set = Cifar10Dataset(dataset=cifar10_data.train, transform=transforms.ToTensor())
 
     kwargs_master = {'batch_size':args.batch_size, 'learning_rate':args.lr, 'max_epochs':args.epochs, 'momentum':args.momentum, 'network':args.network,
-                'comm_method':args.comm_type, 'kill_threshold': args.num_aggregate, 'timeout_threshold':args.kill_threshold}
+                'comm_method':args.comm_type, 'kill_threshold': args.num_aggregate, 'timeout_threshold':args.kill_threshold,
+                'eval_freq':args.eval_freq, 'train_dir':args.train_dir}
 
     kwargs_worker = {'batch_size':args.batch_size, 'learning_rate':args.lr, 'max_epochs':args.epochs, 'momentum':args.momentum, 'network':args.network,
                 'comm_method':args.comm_type, 'kill_threshold':args.kill_threshold}
