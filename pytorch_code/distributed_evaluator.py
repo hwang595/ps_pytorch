@@ -47,6 +47,8 @@ def add_fit_args(parser):
                         help='it determines per how many step the model should be evaluated')
     parser.add_argument('--model-dir', type=str, default='output/models/', metavar='N',
                         help='directory to save the temp model during the training process for evaluation')
+    parser.add_argument('--dataset', type=str, default='MNIST', metavar='N',
+                        help='which dataset used in training, MNIST and Cifar10 supported currently')
     args = parser.parse_args()
     return args
 
@@ -81,7 +83,7 @@ class DistributedEvaluator(NN_Trainer):
                 # TODO(hwang): sleep appropriate period of time make sure to tune this parameter
                 time.sleep(30)
 
-    def _evaluate_model(self, validation_loader=validation_set):
+    def _evaluate_model(self, validation_loader):
         self.network.eval()
         eval_image_batch, eval_label_batch = validation_loader.next_batch(batch_size=self._eval_batch_size)
         X_batch, y_batch = Variable(eval_image_batch.float()), Variable(eval_label_batch.long())
