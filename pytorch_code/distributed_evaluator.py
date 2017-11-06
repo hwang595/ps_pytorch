@@ -13,6 +13,7 @@ from nn_ops import NN_Trainer
 import torch
 from torch.autograd import Variable
 import torch.nn.functional as F
+from torchvision import datasets, transforms
 
 #for tmp solution
 from mnist import mnist
@@ -28,7 +29,6 @@ def accuracy(output, target, topk=(1,)):
     _, pred = output.topk(maxk, 1, True, True)
     pred = pred.t()
     correct = pred.eq(target.view(1, -1).expand_as(pred))
-
     res = []
     for k in topk:
         correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
@@ -62,7 +62,7 @@ class DistributedEvaluator(NN_Trainer):
     def __init__(self, **kwargs):
         self._cur_step = 0
         self._model_dir = kwargs['model_dir']
-        self._eval_freq = kwargs['eval_freq']
+        self._eval_freq = int(kwargs['eval_freq'])
         self._eval_batch_size = kwargs['eval_batch_size']
         # this one is going to be used to avoid fetch the weights for multiple times
         self._layer_cur_step = []
@@ -70,25 +70,35 @@ class DistributedEvaluator(NN_Trainer):
     def evaluate(self, validation_loader):
         # init objective to fetch at the begining
         self._next_step_to_fetch = self._cur_step + self._eval_freq
+        self._num_batch_per_epoch = len(validation_loader) / self._eval_batch_size
+        self._epoch_counter = validation_loader.epochs_completed
         # check if next temp model exsits, if not we wait here else
         # we continue to do the model evaluation
         while True:
-            model_dir_=self._model_dir_generator()
+            model_dir_=self._model_dir_generator(self._next_step_to_fetch)
             if os.path.isfile(model_dir_):
                 self._load_model(model_dir_)
-                print("Evaluator evaluating results on step {}".format(next_step_to_fetch))
+                print("Evaluator evaluating results on step {}".format(self._next_step_to_fetch))
                 self._evaluate_model(validation_loader)
                 self._next_step_to_fetch += self._eval_freq
             else:
                 # TODO(hwang): sleep appropriate period of time make sure to tune this parameter
-                time.sleep(30)
+                time.sleep(10)
 
     def _evaluate_model(self, validation_loader):
         self.network.eval()
-        eval_image_batch, eval_label_batch = validation_loader.next_batch(batch_size=self._eval_batch_size)
-        X_batch, y_batch = Variable(eval_image_batch.float()), Variable(eval_label_batch.long())
-        output = self.network(X_batch)
-        prec1, prec5 = accuracy(output.data, eval_label_batch, topk=(1, 5))
+        prec1_counter_ = prec5_counter_ = batch_counter_ = 0
+        # which indicate an epoch based validation is done
+        while validation_loader.epochs_completed > self._epoch_counter:
+            eval_image_batch, eval_label_batch = validation_loader.next_batch(batch_size=self._eval_batch_size)
+            X_batch, y_batch = Variable(eval_image_batch.float()), Variable(eval_label_batch.long())
+            output = self.network(X_batch)
+            prec1_tmp, prec5_tmp = accuracy(output.data, eval_label_batch, topk=(1, 5))
+            prec1_counter_ += prec1_tmp
+            prec5_counter_ += prec5_tmp
+            batch_counter_ += 1
+        prec1 = prec1_counter_ / batch_counter_
+        prec5 = prec5_counter_ / batch_counter_
         print('Testset Performance: Cur Step:{} Prec@1: {} Prec@5: {}'.format(self._next_step_to_fetch, prec1.numpy()[0], prec5.numpy()[0]))
 
     def _load_model(self, file_path):
@@ -110,7 +120,7 @@ if __name__ == "__main__":
         cifar10_data = cifar10.read_data_sets(padding_size=0, reshape=True)
         validation_set = Cifar10Dataset(dataset=cifar10_data.validation, transform=transforms.ToTensor())
     
-    kwargs_evaluator={'model_dir':args.eval_freq, 'eval_freq':args.model_dir, 'eval_batch_size':args.eval_batch_size}
-    evaluator_nn = DistributedEvaluator(**kwargs)
+    kwargs_evaluator={'model_dir':args.model_dir, 'eval_freq':args.eval_freq, 'eval_batch_size':args.eval_batch_size}
+    evaluator_nn = DistributedEvaluator(**kwargs_evaluator)
     evaluator_nn.evaluate(validation_loader=validation_set)
     print("I am worker: {} in all {} workers".format(worker_fc_nn.rank, worker_fc_nn.world_size))
