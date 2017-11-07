@@ -21,6 +21,21 @@ TAG_LIST_ = [i*30 for i in range(50000)]
 
 LAYER_DIGITS= int(1e+3)
 
+def accuracy(output, target, topk=(1,)):
+    """Computes the precision@k for the specified values of k"""
+    maxk = max(topk)
+    batch_size = target.size(0)
+
+    _, pred = output.topk(maxk, 1, True, True)
+    pred = pred.t()
+    correct = pred.eq(target.view(1, -1).expand_as(pred))
+
+    res = []
+    for k in topk:
+        correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
+        res.append(correct_k.mul_(100.0 / batch_size))
+    return res
+
 def prepare_grad_list(params):
     grad_list = []
     for param_idx, param in enumerate(params):
@@ -143,13 +158,18 @@ class DistributedWorker(NN_Trainer):
                 except TimeoutError:
                     print("Worker: {} Timeout".format(self.rank))
             else:
-                fetch_weight_duration, forward_duration, backward_duration=self.training_process(train_loader)
+                fetch_weight_duration, forward_duration, backward_duration, prec1, prec5=self.training_process(train_loader)
 
             # on the end of a certain iteration
+            print('Worker: {}, Cur Step: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, Prec@1: {}, Prec@5: {}'.format(self.rank,
+                 self.cur_step, self._epoch_idx, self._batch_idx * self.batch_size, self.batch_size*self._num_batch_per_epoch, 
+                 (100. * (self._batch_idx * self.batch_size) / (self.batch_size*self._num_batch_per_epoch)), self._loss_data, time.time()-iter_start_time, prec1.numpy()[0], prec5.numpy()[0]))
+            '''
             print('Worker: {}, Cur Step: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, FetchWeight: {:.4f}, Forward: {:.4f}, Backward: {:.4f}'.format(self.rank,
                     self.cur_step, self._epoch_idx, self._batch_idx * self.batch_size, self.batch_size*self._num_batch_per_epoch, 
                     (100. * (self._batch_idx * self.batch_size) / (self.batch_size*self._num_batch_per_epoch)), self._loss_data, time.time()-iter_start_time, fetch_weight_duration, forward_duration, backward_duration))
-    
+            '''
+
     def training_process(self, train_loader):
         fetch_weight_start_time = time.time()
         if self.comm_type == "Bcast":
@@ -217,7 +237,10 @@ class DistributedWorker(NN_Trainer):
         req_send_check=self.network.backward(logits_1.grad, communicator=self.comm, req_send_check=req_send_check, cur_step=self.cur_step)
         req_send_check[-1].wait()
         backward_duration = time.time()-backward_start_time
-        return fetch_weight_duration, forward_duration, backward_duration
+
+        # calculate training accuracy
+        prec1, prec5 = accuracy(logits.data, train_label_batch.long(), topk=(1, 5))
+        return fetch_weight_duration, forward_duration, backward_duration, prec1, prec5
 
     def init_recv_buf(self):
         self.model_recv_buf = ModelBuffer(self.network)

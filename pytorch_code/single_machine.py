@@ -203,3 +203,4 @@ if __name__ == "__main__":
     nn_learner = NN_Trainer(**kwargs)
     nn_learner.build_model()
     nn_learner.train(train_loader=train_loader)
+    nn_learner.train_and_validate(train_loader=train_loader, test_loader=test_loader)    

@@ -43,7 +43,7 @@ class NN_Trainer(object):
         self.optimizer = torch.optim.SGD(self.network.parameters(), lr=self.lr, momentum=self.momentum)
         self.criterion = torch.nn.CrossEntropyLoss()
 
-    def train(self, train_loader):
+    def train(self, train_loader, test_loader):
         self.network.train()
 
         # iterate of epochs
@@ -57,10 +57,6 @@ class NN_Trainer(object):
                 tmp_time_0 = time.time()
                 loss.backward()
 
-                #for key_name, param in self.network.state_dict().items():
-                #    print(param)
-                #    print("----------------------------------------------------------------")
-                #exit()
                 for param in self.network.parameters():
                     # get gradient from layers here
                     # in this version we fetch weights at once
@@ -73,8 +69,6 @@ class NN_Trainer(object):
                 self.optimizer.step()
                 duration_update = time.time()-tmp_time_1
 
-                print("backward duration: {}".format(duration_backward))
-                print("update duration: {}".format(duration_update))
                 # calculate training accuracy
                 prec1, prec5 = accuracy(logits.data, y_batch, topk=(1, 5))
                 # load the training info
@@ -83,3 +77,19 @@ class NN_Trainer(object):
                     100. * batch_idx / len(train_loader), loss.data[0], 
                     prec1.numpy()[0], 
                     prec5.numpy()[0], time.time()-iter_start_time))
+            # we evaluate the model performance on end of each epoch
+            self.validate(test_loader)
+
+    def validate(self, test_loader):
+        self.network.eval()
+        test_loss = 0
+        correct = 0
+        for data, y_batch in test_loader:
+            data, target = Variable(data, volatile=True), Variable(y_batch)
+            output = self.network(data)
+            test_loss += F.nll_loss(output, target, size_average=False).data[0] # sum up batch loss
+            #pred = output.data.max(1, keepdim=True)[1] # get the index of the max log-probability
+            #correct += pred.eq(target.data.view_as(pred)).cpu().sum()
+            prec1, prec5 = accuracy(output.data, y_batch, topk=(1, 5))
+        test_loss /= len(test_loader.dataset)
+        print('Test set: Average loss: {:.4f}, Prec@1: {} Prec@5: {}'.format(test_loss, prec1.numpy()[0], prec5.numpy()[0]))

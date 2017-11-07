@@ -71,7 +71,7 @@ class DistributedEvaluator(NN_Trainer):
         # init objective to fetch at the begining
         self._next_step_to_fetch = self._cur_step + self._eval_freq
         self._num_batch_per_epoch = len(validation_loader) / self._eval_batch_size
-        self._epoch_counter = validation_loader.epochs_completed
+        self._epoch_counter = validation_loader.dataset.epochs_completed
         # check if next temp model exsits, if not we wait here else
         # we continue to do the model evaluation
         while True:
@@ -89,17 +89,17 @@ class DistributedEvaluator(NN_Trainer):
         self.network.eval()
         prec1_counter_ = prec5_counter_ = batch_counter_ = 0
         # which indicate an epoch based validation is done
-        while validation_loader.epochs_completed > self._epoch_counter:
+        while validation_loader.dataset.epochs_completed > self._epoch_counter:
             eval_image_batch, eval_label_batch = validation_loader.next_batch(batch_size=self._eval_batch_size)
             X_batch, y_batch = Variable(eval_image_batch.float()), Variable(eval_label_batch.long())
             output = self.network(X_batch)
-            prec1_tmp, prec5_tmp = accuracy(output.data, eval_label_batch, topk=(1, 5))
+            prec1_tmp, prec5_tmp = accuracy(output.data, eval_label_batch.long(), topk=(1, 5))
             prec1_counter_ += prec1_tmp
             prec5_counter_ += prec5_tmp
             batch_counter_ += 1
         prec1 = prec1_counter_ / batch_counter_
         prec5 = prec5_counter_ / batch_counter_
-        self._epoch_counter = validation_loader.epochs_completed
+        self._epoch_counter = validation_loader.dataset.epochs_completed
         print('Testset Performance: Cur Step:{} Prec@1: {} Prec@5: {}'.format(self._next_step_to_fetch, prec1.numpy()[0], prec5.numpy()[0]))
 
     def _load_model(self, file_path):
