@@ -44,10 +44,10 @@ class NN_Trainer(object):
         self.criterion = torch.nn.CrossEntropyLoss()
 
     def train_and_validate(self, train_loader, test_loader):
-        self.network.train()
-
         # iterate of epochs
-        for i in range(self.max_epochs):            
+        for i in range(self.max_epochs):
+            # change back to training mode
+            self.network.train()      
             for batch_idx, (data, y_batch) in enumerate(train_loader):
                 iter_start_time = time.time()
                 data, target = Variable(data), Variable(y_batch)
