@@ -43,7 +43,7 @@ class NN_Trainer(object):
         self.optimizer = torch.optim.SGD(self.network.parameters(), lr=self.lr, momentum=self.momentum)
         self.criterion = torch.nn.CrossEntropyLoss()
 
-    def train(self, train_loader, test_loader):
+    def train_and_validate(self, train_loader, test_loader):
         self.network.train()
 
         # iterate of epochs

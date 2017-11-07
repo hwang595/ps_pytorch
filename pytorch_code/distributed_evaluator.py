@@ -89,7 +89,7 @@ class DistributedEvaluator(NN_Trainer):
         self.network.eval()
         prec1_counter_ = prec5_counter_ = batch_counter_ = 0
         # which indicate an epoch based validation is done
-        while validation_loader.dataset.epochs_completed > self._epoch_counter:
+        while validation_loader.dataset.epochs_completed <= self._epoch_counter:
             eval_image_batch, eval_label_batch = validation_loader.next_batch(batch_size=self._eval_batch_size)
             X_batch, y_batch = Variable(eval_image_batch.float()), Variable(eval_label_batch.long())
             output = self.network(X_batch)
