@@ -682,8 +682,8 @@ class ResNetSplit(nn.Module):
                     # update counters
                     mod_avail_index-=1
         return req_send_check
-    '''
-    def backward(self, g):
+    
+    def backward_single(self, g):
         for i, output in reversed(list(enumerate(self.output))):
             #print("Backward processing, step {}".format(i))
             #print("--------------------------------------------------------")
@@ -703,7 +703,6 @@ class ResNetSplit(nn.Module):
                 else:
                     tmp_grad_output = self.input[i+1].grad.view(output.size())
                     output.backward(tmp_grad_output)
-    '''
 
 def ResNetSplit18(kill_threshold):
     return ResNetSplit(BasicBlockSplit, [2,2,2,2], kill_threshold=kill_threshold)

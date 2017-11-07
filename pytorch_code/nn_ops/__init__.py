@@ -8,6 +8,7 @@ from torch.autograd import Variable
 
 from model_ops.lenet import LeNet
 from model_ops.resnet import *
+from model_ops.resnet_split import *
 
 '''this is a trial example, we use MNIST on LeNet for simple test here'''
 def accuracy(output, target, topk=(1,)):
@@ -38,7 +39,8 @@ class NN_Trainer(object):
         if self.network_config == "LeNet":
             self.network=LeNet()
         elif self.network_config == "ResNet":
-            self.network=ResNet18()
+            #self.network=ResNet18()
+            self.network=ResNetSplit18(1)
         # set up optimizer
         self.optimizer = torch.optim.SGD(self.network.parameters(), lr=self.lr, momentum=self.momentum)
         self.criterion = torch.nn.CrossEntropyLoss()
@@ -52,11 +54,22 @@ class NN_Trainer(object):
                 iter_start_time = time.time()
                 data, target = Variable(data), Variable(y_batch)
                 self.optimizer.zero_grad()
+                ################# backward on normal model ############################
+                '''
                 logits = self.network(data)
                 loss = self.criterion(logits, target)
-                tmp_time_0 = time.time()
-                loss.backward()
+                '''
+                #######################################################################
 
+                ################ backward on splitted model ###########################
+                logits = self.network(data)
+                logits_1 = Variable(logits.data, requires_grad=True)
+                loss = self.criterion(logits_1, target)
+                loss.backward()
+                self.network.backward_single(logits_1.grad)
+                #######################################################################
+                tmp_time_0 = time.time()
+                
                 for param in self.network.parameters():
                     # get gradient from layers here
                     # in this version we fetch weights at once
