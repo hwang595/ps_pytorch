@@ -92,8 +92,8 @@ class NN_Trainer(object):
             #pred = output.data.max(1, keepdim=True)[1] # get the index of the max log-probability
             #correct += pred.eq(target.data.view_as(pred)).cpu().sum()
             prec1_tmp, prec5_tmp = accuracy(output.data, y_batch, topk=(1, 5))
-            prec1_counter_ += prec1_tmp.prec1.numpy()[0]
-            prec5_counter_ += prec5_tmp.prec1.numpy()[0]
+            prec1_counter_ += prec1_tmp.numpy()[0]
+            prec5_counter_ += prec5_tmp.numpy()[0]
             batch_counter_ += 1
         prec1 = prec1_counter_ / batch_counter_
         prec5 = prec5_counter_ / batch_counter_
