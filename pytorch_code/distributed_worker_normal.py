@@ -30,6 +30,20 @@ def prepare_grad_list(params):
         grad_list.append((param_idx, grads))
     return grad_list
 
+def accuracy(output, target, topk=(1,)):
+    """Computes the precision@k for the specified values of k"""
+    maxk = max(topk)
+    batch_size = target.size(0)
+
+    _, pred = output.topk(maxk, 1, True, True)
+    pred = pred.t()
+    correct = pred.eq(target.view(1, -1).expand_as(pred))
+
+    res = []
+    for k in topk:
+        correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
+        res.append(correct_k.mul_(100.0 / batch_size))
+    return res
 
 class ModelBuffer(object):
     def __init__(self, network):
@@ -183,9 +197,16 @@ class DistributedWorkerNormal(NN_Trainer):
             # TODO(hwang): figure out the killing process in pytorch framework asap
 
             # on the end of a certain iteration
+            '''
             print('Worker: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, FetchWeight: {:.4f}, Forward: {:.4f}, Backward: {:.4f}'.format(self.rank,
                     epoch_idx, batch_idx * self.batch_size, self.batch_size*num_batch_per_epoch, 
                     (100. * (batch_idx * self.batch_size) / (self.batch_size*num_batch_per_epoch)), loss.data[0], time.time()-iter_start_time, fetch_weight_duration, forward_duration, backward_duration))
+            '''
+            # calculate training accuracy
+            prec1, prec5 = accuracy(logits.data, train_label_batch.long(), topk=(1, 5))
+            print('Worker: {}, Cur Step: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, Prec@1: {}, Prec@5: {}'.format(self.rank,
+                 self.cur_step, epoch_idx, batch_idx * self.batch_size, self.batch_size*num_batch_per_epoch, 
+                    (100. * (batch_idx * self.batch_size) / (self.batch_size*num_batch_per_epoch)), loss.data[0], time.time()-iter_start_time, prec1.numpy()[0], prec5.numpy()[0]))
 
     def init_recv_buf(self):
         self.model_recv_buf = ModelBuffer(self.network)
