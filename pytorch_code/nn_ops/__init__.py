@@ -84,12 +84,18 @@ class NN_Trainer(object):
         self.network.eval()
         test_loss = 0
         correct = 0
+        prec1_counter_ = prec5_counter_ = batch_counter_ = 0
         for data, y_batch in test_loader:
             data, target = Variable(data, volatile=True), Variable(y_batch)
             output = self.network(data)
             test_loss += F.nll_loss(output, target, size_average=False).data[0] # sum up batch loss
             #pred = output.data.max(1, keepdim=True)[1] # get the index of the max log-probability
             #correct += pred.eq(target.data.view_as(pred)).cpu().sum()
-            prec1, prec5 = accuracy(output.data, y_batch, topk=(1, 5))
+            prec1_tmp, prec5_tmp = accuracy(output.data, y_batch, topk=(1, 5))
+            prec1_counter_ += prec1_tmp.prec1.numpy()[0]
+            prec5_counter_ += prec5_tmp.prec1.numpy()[0]
+            batch_counter_ += 1
+        prec1 = prec1_counter_ / batch_counter_
+        prec5 = prec5_counter_ / batch_counter_
         test_loss /= len(test_loader.dataset)
-        print('Test set: Average loss: {:.4f}, Prec@1: {} Prec@5: {}'.format(test_loss, prec1.numpy()[0], prec5.numpy()[0]))
+        print('Test set: Average loss: {:.4f}, Prec@1: {} Prec@5: {}'.format(test_loss, prec1, prec5))
