@@ -193,14 +193,21 @@ if __name__ == "__main__":
                        transforms.ToTensor(),
                        transforms.Normalize((0.1307,), (0.3081,))]))
         train_loader = DataLoader(training_set, batch_size=args.batch_size, shuffle=True)
-
+        test_loader = torch.utils.data.DataLoader(
+            datasets.MNIST('../data', train=False, transform=transforms.Compose([
+                       transforms.ToTensor(),
+                       transforms.Normalize((0.1307,), (0.3081,))
+                   ])), batch_size=args.test_batch_size, shuffle=True)
     elif args.dataset == "Cifar10":
         trainset = datasets.CIFAR10(root='./cifar10_data', train=True,
                                                 download=True, transform=transforms.ToTensor())
         train_loader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size,
                                                   shuffle=True)
+        test_loader = torch.utils.data.DataLoader(
+            datasets.CIFAR10('../data', train=False, transform=transforms.Compose([
+                       transforms.ToTensor()
+                   ])), batch_size=args.test_batch_size, shuffle=True)
 
     nn_learner = NN_Trainer(**kwargs)
     nn_learner.build_model()
-    nn_learner.train(train_loader=train_loader)
     nn_learner.train_and_validate(train_loader=train_loader, test_loader=test_loader)    
