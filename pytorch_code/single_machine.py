@@ -204,7 +204,7 @@ if __name__ == "__main__":
         train_loader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size,
                                                   shuffle=True)
         test_loader = torch.utils.data.DataLoader(
-            datasets.CIFAR10('../data', train=False, transform=transforms.Compose([
+            datasets.CIFAR10('./cifar10_data', train=False, transform=transforms.Compose([
                        transforms.ToTensor()
                    ])), batch_size=args.test_batch_size, shuffle=True)
 
