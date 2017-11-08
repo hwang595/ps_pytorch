@@ -157,6 +157,8 @@ class DistributedWorkerNormal(NN_Trainer):
             train_image_batch, train_label_batch = train_loader.next_batch(batch_size=self.batch_size)
             X_batch, y_batch = Variable(train_image_batch.float()), Variable(train_label_batch.long())
 
+            # switch to training mode
+            self.network.train()
             # manage batch index manually
             batch_idx += 1
             self.optimizer.zero_grad()

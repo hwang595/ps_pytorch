@@ -109,6 +109,7 @@ class LeNetSplit(nn.Module):
         channel_index = self._init_channel_index - 2
         mod_counters_ = [0]*len(self.full_modules)
         for i, output in reversed(list(enumerate(self.output))):
+            req_send_check[-1].wait()
             if i == (len(self.output) - 1):
                 # for last node, use g
                 output.backward(g)
@@ -146,6 +147,7 @@ class LeNetSplit(nn.Module):
                 else:
                     continue
         if mod_counters_[0] == 1:
+            req_send_check[-1].wait()
             grads = tmp_grad_weight.data.numpy().astype(np.float64)
             req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
             req_send_check.append(req_isend)

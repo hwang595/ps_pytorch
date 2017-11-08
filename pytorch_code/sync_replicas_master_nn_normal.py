@@ -27,6 +27,21 @@ def update_params_dist_version(param, avg_grad, learning_rate):
     param -= learning_rate * avg_grad
     return param
 
+def accuracy(output, target, topk=(1,)):
+    """Computes the precision@k for the specified values of k"""
+    maxk = max(topk)
+    batch_size = target.size(0)
+
+    _, pred = output.topk(maxk, 1, True, True)
+    pred = pred.t()
+    correct = pred.eq(target.view(1, -1).expand_as(pred))
+
+    res = []
+    for k in topk:
+        correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
+        res.append(correct_k.mul_(100.0 / batch_size))
+    return res
+
 class GradientAccumulator(object):
 	'''a simple class to implement gradient aggregator like the `Conditional Accumulators` in tensorflow'''
 	def __init__(self, module, num_worker):
@@ -78,8 +93,6 @@ class GradientAccumulator(object):
 			for j, buf in enumerate(tmp_aggregator):
 				self.gradient_aggregator[i][j] = np.zeros(self.gradient_aggregator[i][j].shape)
 
-
-
 class SyncReplicasMasterNormal_NN(NN_Trainer):
 	def __init__(self, comm, **kwargs):
 		'''master node here, no rank needed since the rank will always be 0 for master node'''
@@ -99,6 +112,10 @@ class SyncReplicasMasterNormal_NN(NN_Trainer):
 		self._first_grad_received = False
 		self._eval_freq = kwargs['eval_freq']
 		self._train_dir = kwargs['train_dir']
+		
+
+		############ will be deprecated soon #############################
+		self._eval_batch_size = 1000
 
 	def build_model(self):
 		# build network
@@ -115,14 +132,17 @@ class SyncReplicasMasterNormal_NN(NN_Trainer):
 		self.grad_accumulator = GradientAccumulator(module=self.network, num_worker=self.world_size-1)
 		self.init_model_shapes()
 
-	def train(self):
+	def train(self, test_loader):
 		# the first step we need to do here is to sync fetch the inital worl_step from the parameter server
 		# we still need to make sure the value we fetched from parameter server is 1
 		# please note that step is start from one here
+		self._epoch_counter = test_loader.dataset.epochs_completed
 		self.async_bcast_step()
 
 		# fake test here:
 		for i in range(1, MAX_NUM_ITERATIONS):
+			# switch back to training mode
+			self.network.train()
 			self._first_grad_received = False
 			enough_gradients_received = False
 
@@ -188,6 +208,8 @@ class SyncReplicasMasterNormal_NN(NN_Trainer):
 			# save model for validation in a pre-specified frequency
 			if self.cur_step%self._eval_freq == 0:
 				self._save_model(file_path=self._generate_model_path())
+				print("Master evaluating the model ... ")
+				self._evaluate_model(test_loader)
 			self.cur_step += 1
 
 	def init_model_shapes(self):
@@ -276,3 +298,22 @@ class SyncReplicasMasterNormal_NN(NN_Trainer):
 		with open(file_path, "wb") as f_:
 			torch.save(self.network, f_)
 		return
+
+	def _evaluate_model(self, validation_loader):
+        self.network.eval()
+        prec1_counter_ = prec5_counter_ = batch_counter_ = 0
+        # which indicate an epoch based validation is done
+        while validation_loader.dataset.epochs_completed <= self._epoch_counter:
+            eval_image_batch, eval_label_batch = validation_loader.next_batch(batch_size=self._eval_batch_size)
+            X_batch, y_batch = Variable(eval_image_batch.float()), Variable(eval_label_batch.long())
+            output = self.network(X_batch)
+            prec1_tmp, prec5_tmp = accuracy(output.data, eval_label_batch.long(), topk=(1, 5))
+            prec1_counter_ += prec1_tmp
+            prec5_counter_ += prec5_tmp
+            batch_counter_ += 1
+        prec1 = prec1_counter_ / batch_counter_
+        prec5 = prec5_counter_ / batch_counter_
+        self._epoch_counter = validation_loader.dataset.epochs_completed
+        print('Testset Performance: Cur Step:{} Prec@1: {} Prec@5: {}'.format(self.cur_step, prec1.numpy()[0], prec5.numpy()[0]))
+
+

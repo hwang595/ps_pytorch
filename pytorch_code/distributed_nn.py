@@ -87,9 +87,12 @@ if __name__ == "__main__":
     if args.dataset == "MNIST":
         mnist_data = mnist.read_data_sets(train_dir='./mnist_data', reshape=True)
         train_set = MNISTDataset(dataset=mnist_data.train, transform=transforms.ToTensor())
+        validation_set = MNISTDataset(dataset=mnist_data.validation, transform=transforms.ToTensor())
     elif args.dataset == "Cifar10":
         cifar10_data = cifar10.read_data_sets(padding_size=0, reshape=True)
         train_set = Cifar10Dataset(dataset=cifar10_data.train, transform=transforms.ToTensor())
+        validation_set = Cifar10Dataset(dataset=cifar10_data.validation, transform=transforms.ToTensor())
+
 
     kwargs_master = {'batch_size':args.batch_size, 'learning_rate':args.lr, 'max_epochs':args.epochs, 'momentum':args.momentum, 'network':args.network,
                 'comm_method':args.comm_type, 'kill_threshold': args.num_aggregate, 'timeout_threshold':args.kill_threshold,
@@ -105,7 +108,7 @@ if __name__ == "__main__":
             master_fc_nn = SyncReplicasMaster_NN(comm=comm, **kwargs_master)
         master_fc_nn.build_model()
         print("I am the master: the world size is {}, cur step: {}".format(master_fc_nn.world_size, master_fc_nn.cur_step))
-        master_fc_nn.train()
+        master_fc_nn.train(validation_set)
         print("Done sending messages to workers!")
     else:
         if args.mode == "normal":
