@@ -32,7 +32,7 @@ NUM_LABELS=10
 IMAGE_PIXELS=IMAGE_SIZE*IMAGE_SIZE
 NUM_CHANNELS=1
 PIXEL_DEPTH=255
-SEED=66478 
+#SEED=66478 
 
 
 class DataSet(object):
@@ -50,7 +50,7 @@ class DataSet(object):
     `[0, 1]`.
     """
 #    numpy.random.seed(int(time.time()))
-    numpy.random.seed(SEED)
+    #numpy.random.seed(SEED)
     dtype = dtypes.as_dtype(dtype).base_dtype
     if dtype not in (dtypes.uint8, dtypes.float32):
       raise TypeError('Invalid image dtype %r, expected uint8 or float32' %
@@ -117,7 +117,7 @@ class DataSet(object):
       self._epochs_completed += 1
       # Shuffle the data
       perm = numpy.arange(self._num_examples)
-      numpy.random.seed(SEED)
+      #numpy.random.seed(SEED)
       numpy.random.shuffle(perm)
       self._images = self._images[perm]
       self._labels = self._labels[perm]
