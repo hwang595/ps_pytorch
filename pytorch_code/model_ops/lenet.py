@@ -103,7 +103,7 @@ class LeNetSplit(nn.Module):
     def fetch_init_channel_index(self):
         return self._init_channel_index
 
-    def backward(self, g, communicator, req_send_check):
+    def backward_normal(self, g, communicator, req_send_check, cur_step):
         mod_avail_index = len(self.full_modules)-1
         #channel_index = len(self.full_modules)*2-2
         channel_index = self._init_channel_index - 2
