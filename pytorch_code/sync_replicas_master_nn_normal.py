@@ -20,27 +20,27 @@ MAX_NUM_ITERATIONS = 20000
 
 
 def update_params_dist_version(param, avg_grad, learning_rate):
-    '''
-    update the network layer by layer
-    '''
-    assert param.shape == avg_grad.shape
-    param -= learning_rate * avg_grad
-    return param
+	'''
+	update the network layer by layer
+	'''
+	assert param.shape == avg_grad.shape
+	param -= learning_rate * avg_grad
+	return param
 
 def accuracy(output, target, topk=(1,)):
-    """Computes the precision@k for the specified values of k"""
-    maxk = max(topk)
-    batch_size = target.size(0)
+	"""Computes the precision@k for the specified values of k"""
+	maxk = max(topk)
+	batch_size = target.size(0)
 
-    _, pred = output.topk(maxk, 1, True, True)
-    pred = pred.t()
-    correct = pred.eq(target.view(1, -1).expand_as(pred))
+	_, pred = output.topk(maxk, 1, True, True)
+	pred = pred.t()
+	correct = pred.eq(target.view(1, -1).expand_as(pred))
 
-    res = []
-    for k in topk:
-        correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
-        res.append(correct_k.mul_(100.0 / batch_size))
-    return res
+	res = []
+	for k in topk:
+		correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
+		res.append(correct_k.mul_(100.0 / batch_size))
+	return res
 
 class GradientAccumulator(object):
 	'''a simple class to implement gradient aggregator like the `Conditional Accumulators` in tensorflow'''
@@ -300,20 +300,18 @@ class SyncReplicasMasterNormal_NN(NN_Trainer):
 		return
 
 	def _evaluate_model(self, validation_loader):
-        self.network.eval()
-        prec1_counter_ = prec5_counter_ = batch_counter_ = 0
-        # which indicate an epoch based validation is done
-        while validation_loader.dataset.epochs_completed <= self._epoch_counter:
-            eval_image_batch, eval_label_batch = validation_loader.next_batch(batch_size=self._eval_batch_size)
-            X_batch, y_batch = Variable(eval_image_batch.float()), Variable(eval_label_batch.long())
-            output = self.network(X_batch)
-            prec1_tmp, prec5_tmp = accuracy(output.data, eval_label_batch.long(), topk=(1, 5))
-            prec1_counter_ += prec1_tmp
-            prec5_counter_ += prec5_tmp
-            batch_counter_ += 1
-        prec1 = prec1_counter_ / batch_counter_
-        prec5 = prec5_counter_ / batch_counter_
-        self._epoch_counter = validation_loader.dataset.epochs_completed
-        print('Testset Performance: Cur Step:{} Prec@1: {} Prec@5: {}'.format(self.cur_step, prec1.numpy()[0], prec5.numpy()[0]))
-
-
+		self.network.eval()
+		prec1_counter_ = prec5_counter_ = batch_counter_ = 0
+		# which indicate an epoch based validation is done
+		while validation_loader.dataset.epochs_completed <= self._epoch_counter:
+			eval_image_batch, eval_label_batch = validation_loader.next_batch(batch_size=self._eval_batch_size)
+			X_batch, y_batch = Variable(eval_image_batch.float()), Variable(eval_label_batch.long())
+			output = self.network(X_batch)
+			prec1_tmp, prec5_tmp = accuracy(output.data, eval_label_batch.long(), topk=(1, 5))
+			prec1_counter_ += prec1_tmp
+			prec5_counter_ += prec5_tmp
+			batch_counter_ += 1
+		prec1 = prec1_counter_ / batch_counter_
+		prec5 = prec5_counter_ / batch_counter_
+		self._epoch_counter = validation_loader.dataset.epochs_completed
+		print('Testset Performance: Cur Step:{} Prec@1: {} Prec@5: {}'.format(self.cur_step, prec1.numpy()[0], prec5.numpy()[0]))
