@@ -104,7 +104,7 @@ class DistributedWorkerNormal(NN_Trainer):
         #self._param_idx = len(self.network.full_modules)*2-1
         self._param_idx = self.network.fetch_init_channel_index-1
 
-    def train(self, train_loader):
+    def train(self, train_loader, test_loader):
         # the first step we need to do here is to sync fetch the inital worl_step from the parameter server
         # we still need to make sure the value we fetched from parameter server is 1
         self.sync_fetch_step()
@@ -159,6 +159,7 @@ class DistributedWorkerNormal(NN_Trainer):
 
             # switch to training mode
             self.network.train()
+            self._epoch_counter = test_loader.dataset.epochs_completed
             # manage batch index manually
             batch_idx += 1
             self.optimizer.zero_grad()
@@ -203,6 +204,9 @@ class DistributedWorkerNormal(NN_Trainer):
                     self.cur_step, epoch_idx, batch_idx * self.batch_size, self.batch_size*num_batch_per_epoch, 
                     (100. * (batch_idx * self.batch_size) / (self.batch_size*num_batch_per_epoch)), loss.data[0], time.time()-iter_start_time, fetch_weight_duration, forward_duration, backward_duration))
             # calculate training accuracy
+            if self.cur_step % 200:
+                print("Worker evaluating the model ... ")
+                self._evaluate_model(test_loader)
             '''
             prec1, prec5 = accuracy(logits.data, train_label_batch.long(), topk=(1, 5))
             print('Worker: {}, Cur Step: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, Prec@1: {}, Prec@5: {}'.format(self.rank,
@@ -276,6 +280,23 @@ class DistributedWorkerNormal(NN_Trainer):
                 model_counter_ += 1
             new_state_dict.update(tmp_dict)
         self.network.load_state_dict(new_state_dict)
+
+    def _evaluate_model(self, validation_loader):
+        self.network.eval()
+        prec1_counter_ = prec5_counter_ = batch_counter_ = 0
+        # which indicate an epoch based validation is done
+        while validation_loader.dataset.epochs_completed <= self._epoch_counter:
+            eval_image_batch, eval_label_batch = validation_loader.next_batch(batch_size=self._eval_batch_size)
+            X_batch, y_batch = Variable(eval_image_batch.float()), Variable(eval_label_batch.long())
+            output = self.network(X_batch)
+            prec1_tmp, prec5_tmp = accuracy(output.data, eval_label_batch.long(), topk=(1, 5))
+            prec1_counter_ += prec1_tmp
+            prec5_counter_ += prec5_tmp
+            batch_counter_ += 1
+        prec1 = prec1_counter_ / batch_counter_
+        prec5 = prec5_counter_ / batch_counter_
+        self._epoch_counter = validation_loader.dataset.epochs_completed
+        print('Testset Performance: Cur Step:{} Prec@1: {} Prec@5: {}'.format(self.cur_step, prec1.numpy()[0], prec5.numpy()[0]))
 
 if __name__ == "__main__":
     # this is only a simple test case

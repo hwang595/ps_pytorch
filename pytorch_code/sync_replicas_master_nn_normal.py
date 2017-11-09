@@ -132,11 +132,10 @@ class SyncReplicasMasterNormal_NN(NN_Trainer):
 		self.grad_accumulator = GradientAccumulator(module=self.network, num_worker=self.world_size-1)
 		self.init_model_shapes()
 
-	def train(self, test_loader):
+	def train(self):
 		# the first step we need to do here is to sync fetch the inital worl_step from the parameter server
 		# we still need to make sure the value we fetched from parameter server is 1
 		# please note that step is start from one here
-		self._epoch_counter = test_loader.dataset.epochs_completed
 		self.async_bcast_step()
 
 		# fake test here:
@@ -208,8 +207,6 @@ class SyncReplicasMasterNormal_NN(NN_Trainer):
 			# save model for validation in a pre-specified frequency
 			if self.cur_step%self._eval_freq == 0:
 				self._save_model(file_path=self._generate_model_path())
-				print("Master evaluating the model ... ")
-				self._evaluate_model(test_loader)
 			self.cur_step += 1
 
 	def init_model_shapes(self):

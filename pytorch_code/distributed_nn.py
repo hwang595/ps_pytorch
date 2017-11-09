@@ -117,5 +117,5 @@ if __name__ == "__main__":
             worker_fc_nn = DistributedWorker(comm=comm, **kwargs_worker)
         worker_fc_nn.build_model()
         print("I am worker: {} in all {} workers, next step: {}".format(worker_fc_nn.rank, worker_fc_nn.world_size-1, worker_fc_nn.next_step))
-        worker_fc_nn.train(train_loader=train_set)
+        worker_fc_nn.train(train_loader=train_set, test_loader=validation_set)
         print("Now the next step is: {}".format(worker_fc_nn.next_step))
