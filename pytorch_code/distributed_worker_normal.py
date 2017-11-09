@@ -83,6 +83,7 @@ class DistributedWorkerNormal(NN_Trainer):
         self.network_config = kwargs['network']
         self.comm_type = kwargs['comm_method']
         self.kill_threshold = kwargs['kill_threshold']
+        self._eval_batch_size = 100
 
         # this one is going to be used to avoid fetch the weights for multiple times
         self._layer_cur_step = []
