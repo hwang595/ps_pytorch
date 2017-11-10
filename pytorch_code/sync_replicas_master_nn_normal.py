@@ -16,7 +16,7 @@ import torch
 STEP_START_ = 1
 
 #MAX_NUM_ITERATIONS = 1000000
-MAX_NUM_ITERATIONS = 20000
+MAX_NUM_ITERATIONS = 100000
 
 
 def update_params_dist_version(param, avg_grad, learning_rate):
