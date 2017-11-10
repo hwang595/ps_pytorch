@@ -205,9 +205,11 @@ class DistributedWorkerNormal(NN_Trainer):
                     self.cur_step, epoch_idx, batch_idx * self.batch_size, self.batch_size*num_batch_per_epoch, 
                     (100. * (batch_idx * self.batch_size) / (self.batch_size*num_batch_per_epoch)), loss.data[0], time.time()-iter_start_time, fetch_weight_duration, forward_duration, backward_duration))
             # calculate training accuracy
-            if self.cur_step % 200:
+            '''
+            if self.cur_step % 200 == 0:
                 print("Worker evaluating the model ... ")
                 self._evaluate_model(test_loader)
+            '''
             '''
             prec1, prec5 = accuracy(logits.data, train_label_batch.long(), topk=(1, 5))
             print('Worker: {}, Cur Step: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, Prec@1: {}, Prec@5: {}'.format(self.rank,

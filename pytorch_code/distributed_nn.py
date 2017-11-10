@@ -108,7 +108,7 @@ if __name__ == "__main__":
             master_fc_nn = SyncReplicasMaster_NN(comm=comm, **kwargs_master)
         master_fc_nn.build_model()
         print("I am the master: the world size is {}, cur step: {}".format(master_fc_nn.world_size, master_fc_nn.cur_step))
-        master_fc_nn.train(validation_set)
+        master_fc_nn.train()
         print("Done sending messages to workers!")
     else:
         if args.mode == "normal":

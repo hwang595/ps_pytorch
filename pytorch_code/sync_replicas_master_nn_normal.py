@@ -112,6 +112,7 @@ class SyncReplicasMasterNormal_NN(NN_Trainer):
 		self._first_grad_received = False
 		self._eval_freq = kwargs['eval_freq']
 		self._train_dir = kwargs['train_dir']
+		self._expected_grad_to_recv = kwargs['kill_threshold']
 		
 
 		############ will be deprecated soon #############################
@@ -174,7 +175,10 @@ class SyncReplicasMasterNormal_NN(NN_Trainer):
 					assert (received_grad.shape == self._model_shapes[layer_index])
 
 					# aggregate the gradient
-					self.aggregate_gradient(gradient=received_grad, layer_idx=layer_index)
+					############################ only for temp test ###################################
+					if self.grad_accumulator.gradient_aggregate_counter[layer_index] <= self._expected_grad_to_recv:
+						self.aggregate_gradient(gradient=received_grad, layer_idx=layer_index)
+					#self.aggregate_gradient(gradient=received_grad, layer_idx=layer_index)
 
 					self.grad_accumulator.gradient_aggregate_counter[layer_index] += 1
 					
@@ -189,7 +193,8 @@ class SyncReplicasMasterNormal_NN(NN_Trainer):
 			print("Master: gradient gather time: {:.4f}".format(grad_gather_duration))
 			# average gradients and update the mode
 			for i in range(len(self._grad_aggregate_buffer)):
-				self._grad_aggregate_buffer[i] /= self._num_grad_to_collect
+				#self._grad_aggregate_buffer[i] /= self._num_grad_to_collect
+				self._grad_aggregate_buffer[i] /= self._expected_grad_to_recv
 
 			# update using SGD method
 			tmp_module = []
