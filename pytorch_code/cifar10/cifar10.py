@@ -373,7 +373,7 @@ def prepare_train_data(padding_size):
         path_list.append(full_data_dir + str(i))
     data, label = read_in_all_images(path_list, is_random_label=TRAIN_RANDOM_LABEL)
     # remove whitening here
-    #data = whitening_image(data)
+    data = whitening_image(data)
     pad_width = ((0, 0), (padding_size, padding_size), (padding_size, padding_size), (0, 0))
     data = np.pad(data, pad_width=pad_width, mode='constant', constant_values=0)
 
@@ -387,8 +387,7 @@ def read_validation_data():
     validation_array, validation_labels = read_in_all_images([vali_dir],
                                                        is_random_label=VALI_RANDOM_LABEL)
     # remove whitening here:
-    #validation_array = whitening_image(validation_array)
-
+    validation_array = whitening_image(validation_array)
     return validation_array, validation_labels
 
 def read_data_sets(padding_size, dtype=dtypes.float32, reshape=False):
