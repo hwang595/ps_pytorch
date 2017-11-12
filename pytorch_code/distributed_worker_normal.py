@@ -114,7 +114,7 @@ class DistributedWorkerNormal(NN_Trainer):
         assert(self.cur_step == STEP_START_)
 
         # number of batches in one epoch
-        num_batch_per_epoch = len(train_loader) / self.batch_size
+        num_batch_per_epoch = len(train_loader.dataset) / self.batch_size
         batch_idx = -1
         epoch_idx = 0
         epoch_avg_loss = 0
@@ -126,88 +126,81 @@ class DistributedWorkerNormal(NN_Trainer):
         print("Worker {}: starting training".format(self.rank))
         # start the training process
         # start the training process
-        for batch_idx, (train_image_batch, train_label_batch) in enumerate(train_loader):
-            X_batch, y_batch = Variable(train_image_batch), Variable(train_label_batch)
-            while True:
-                # the worker shouldn't know the current global step
-                # except received the message from parameter server
-                self.async_fetch_step()
+        for num_epoch in range(self.max_epochs):
+            for batch_idx, (train_image_batch, train_label_batch) in enumerate(train_loader):
+                X_batch, y_batch = Variable(train_image_batch), Variable(train_label_batch)
+                while True:
+                    # the worker shouldn't know the current global step
+                    # except received the message from parameter server
+                    self.async_fetch_step()
 
-                # the only way every worker know which step they're currently on is to check the cur step variable
-                updated = self.update_step()
+                    # the only way every worker know which step they're currently on is to check the cur step variable
+                    updated = self.update_step()
 
-                if (not updated) and (not first):
-                    # wait here unitl enter next step
-                    continue
+                    if (not updated) and (not first):
+                        # wait here unitl enter next step
+                        continue
 
-                # the real start point of this iteration
-                iteration_last_step = time.time() - iter_start_time
-                iter_start_time = time.time()
-                first = False
-                print("Rank of this node: {}, Current step: {}".format(self.rank, self.cur_step))
+                    # the real start point of this iteration
+                    iteration_last_step = time.time() - iter_start_time
+                    iter_start_time = time.time()
+                    first = False
+                    print("Rank of this node: {}, Current step: {}".format(self.rank, self.cur_step))
 
-                # TODO(hwang): return layer request here and do weight before the forward step begins, rather than implement
-                # the wait() in the fetch function
-                fetch_weight_start_time = time.time()
-                if self.comm_type == "Bcast":
-                    self.async_fetch_weights_bcast()
-                elif self.comm_type == "Async":
-                    self.async_fetch_weights_async()
+                    # TODO(hwang): return layer request here and do weight before the forward step begins, rather than implement
+                    # the wait() in the fetch function
+                    fetch_weight_start_time = time.time()
+                    if self.comm_type == "Bcast":
+                        self.async_fetch_weights_bcast()
+                    elif self.comm_type == "Async":
+                        self.async_fetch_weights_async()
 
-                fetch_weight_duration = time.time() - fetch_weight_start_time
-                time_point_log = datetime.now()
+                    fetch_weight_duration = time.time() - fetch_weight_start_time
+                    time_point_log = datetime.now()
 
-                # switch to training mode
-                self.network.train()
-                #self._epoch_counter = test_loader.dataset.epochs_completed
-                # manage batch index manually
-                batch_idx += 1
-                self.optimizer.zero_grad()
+                    # switch to training mode
+                    self.network.train()
+                    #self._epoch_counter = test_loader.dataset.epochs_completed
+                    # manage batch index manually
+                    self.optimizer.zero_grad()
 
-                if batch_idx == num_batch_per_epoch - 1:
-                    batch_idx = 0
-                    epoch_avg_loss /= num_batch_per_epoch
-                    print("Average for epoch {} is {}".format(epoch_idx, epoch_avg_loss))
-                    epoch_idx += 1
-                    epoch_avg_loss = 0
+                    # forward step
+                    forward_start_time = time.time()
+                    logits = self.network(X_batch)
+                    logits_1 = Variable(logits.data, requires_grad=True)
 
-                # forward step
-                forward_start_time = time.time()
-                logits = self.network(X_batch)
-                logits_1 = Variable(logits.data, requires_grad=True)
+                    loss = self.criterion(logits_1, y_batch)
 
-                loss = self.criterion(logits_1, y_batch)
+                    epoch_avg_loss += loss.data[0]
+                    forward_duration = time.time()-forward_start_time
 
-                epoch_avg_loss += loss.data[0]
-                forward_duration = time.time()-forward_start_time
+                    # backward step
+                    backward_start_time = time.time()
+                    loss.backward()
+                    # we can send the grad of this very first layer to parameter server right here before
+                    # the chain rule is begining
+                    req_send_check = []
+                    init_grad_data = logits_1.grad.data.numpy()
+                    init_grad_data = np.sum(init_grad_data, axis=0).astype(np.float64)
+                    # send grad to parameter server
+                    req_isend = self.comm.Isend([init_grad_data, MPI.DOUBLE], dest=0, tag=88+self._param_idx)
+                    req_send_check.append(req_isend)
+                    
+                    req_send_check=self.network.backward_normal(logits_1.grad, communicator=self.comm, req_send_check=req_send_check, cur_step=self.cur_step)
+                    req_send_check[-1].wait()
 
-                # backward step
-                backward_start_time = time.time()
-                loss.backward()
-                # we can send the grad of this very first layer to parameter server right here before
-                # the chain rule is begining
-                req_send_check = []
-                init_grad_data = logits_1.grad.data.numpy()
-                init_grad_data = np.sum(init_grad_data, axis=0).astype(np.float64)
-                # send grad to parameter server
-                req_isend = self.comm.Isend([init_grad_data, MPI.DOUBLE], dest=0, tag=88+self._param_idx)
-                req_send_check.append(req_isend)
-                
-                req_send_check=self.network.backward_normal(logits_1.grad, communicator=self.comm, req_send_check=req_send_check, cur_step=self.cur_step)
-                req_send_check[-1].wait()
+                    backward_duration = time.time()-backward_start_time
 
-                backward_duration = time.time()-backward_start_time
-
-                # on the end of a certain iteration
-                print('Worker: {}, Cur Step: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, FetchWeight: {:.4f}, Forward: {:.4f}, Backward: {:.4f}'.format(self.rank,
-                        self.cur_step, epoch_idx, batch_idx * self.batch_size, self.batch_size*num_batch_per_epoch, 
-                        (100. * (batch_idx * self.batch_size) / (self.batch_size*num_batch_per_epoch)), loss.data[0], time.time()-iter_start_time, fetch_weight_duration, forward_duration, backward_duration))
-                # calculate training accuracy
-                if self.cur_step % 200 == 0:
-                    print("Worker evaluating the model ... ")
-                    self._evaluate_model(test_loader)
-                # break here to fetch data then enter fetching step loop again
-                break
+                    # on the end of a certain iteration
+                    print('Worker: {}, Cur Step: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, FetchWeight: {:.4f}, Forward: {:.4f}, Backward: {:.4f}'.format(self.rank,
+                            self.cur_step, num_epoch, batch_idx * self.batch_size, len(train_loader.dataset), 
+                            (100. * (batch_idx * self.batch_size) / len(train_loader.dataset)), loss.data[0], time.time()-iter_start_time, fetch_weight_duration, forward_duration, backward_duration))
+                    # calculate training accuracy
+                    if self.cur_step % 200 == 0:
+                        print("Worker evaluating the model ... ")
+                        self._evaluate_model(test_loader)
+                    # break here to fetch data then enter fetching step loop again
+                    break
                 '''
                 prec1, prec5 = accuracy(logits.data, train_label_batch.long(), topk=(1, 5))
                 print('Worker: {}, Cur Step: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, Prec@1: {}, Prec@5: {}'.format(self.rank,
@@ -282,7 +275,7 @@ class DistributedWorkerNormal(NN_Trainer):
             new_state_dict.update(tmp_dict)
         self.network.load_state_dict(new_state_dict)
 
-    def _evaluate_model(self, validation_loader):
+    def _evaluate_model(self, test_loader):
         self.network.eval()
         test_loss = 0
         correct = 0
