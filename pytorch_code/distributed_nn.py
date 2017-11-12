@@ -97,7 +97,7 @@ if __name__ == "__main__":
                    ])), batch_size=args.test_batch_size, shuffle=True)
     elif args.dataset == "Cifar10":
         trainset = datasets.CIFAR10(root='./cifar10_data', train=True,
-                                                download=True, transform=transform=transforms.Compose([
+                                                download=True, transform=transforms.Compose([
                        transforms.ToTensor(),
                        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
                    ]))
