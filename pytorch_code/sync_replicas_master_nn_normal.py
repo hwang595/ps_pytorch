@@ -15,9 +15,6 @@ import torch
 
 STEP_START_ = 1
 
-#MAX_NUM_ITERATIONS = 1000000
-MAX_NUM_ITERATIONS = 100000
-
 
 def update_params_dist_version(param, avg_grad, learning_rate):
 	'''
@@ -113,7 +110,7 @@ class SyncReplicasMasterNormal_NN(NN_Trainer):
 		self._eval_freq = kwargs['eval_freq']
 		self._train_dir = kwargs['train_dir']
 		self._expected_grad_to_recv = kwargs['kill_threshold']
-		
+		self._max_steps = kwargs['max_steps']
 
 		############ will be deprecated soon #############################
 		self._eval_batch_size = 1000
@@ -140,7 +137,7 @@ class SyncReplicasMasterNormal_NN(NN_Trainer):
 		self.async_bcast_step()
 
 		# fake test here:
-		for i in range(1, MAX_NUM_ITERATIONS):
+		for i in range(1, self._max_steps):
 			# switch back to training mode
 			self.network.train()
 			self._first_grad_received = False
@@ -209,9 +206,6 @@ class SyncReplicasMasterNormal_NN(NN_Trainer):
 			# reset essential elements
 			self.meset_grad_buffer()
 			self.grad_accumulator.meset_everything()
-			# save model for validation in a pre-specified frequency
-			if self.cur_step%self._eval_freq == 0:
-				self._save_model(file_path=self._generate_model_path())
 			self.cur_step += 1
 
 	def init_model_shapes(self):

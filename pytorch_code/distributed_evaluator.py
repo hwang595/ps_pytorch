@@ -14,6 +14,7 @@ import torch
 from torch.autograd import Variable
 import torch.nn.functional as F
 from torchvision import datasets, transforms
+from torch.utils.data import DataLoader
 
 #for tmp solution
 from mnist import mnist
@@ -71,7 +72,6 @@ class DistributedEvaluator(NN_Trainer):
         # init objective to fetch at the begining
         self._next_step_to_fetch = self._cur_step + self._eval_freq
         self._num_batch_per_epoch = len(validation_loader) / self._eval_batch_size
-        self._epoch_counter = validation_loader.dataset.epochs_completed
         # check if next temp model exsits, if not we wait here else
         # we continue to do the model evaluation
         while True:
@@ -85,22 +85,25 @@ class DistributedEvaluator(NN_Trainer):
                 # TODO(hwang): sleep appropriate period of time make sure to tune this parameter
                 time.sleep(10)
 
-    def _evaluate_model(self, validation_loader):
+    def _evaluate_model(self, test_loader):
         self.network.eval()
+        test_loss = 0
+        correct = 0
         prec1_counter_ = prec5_counter_ = batch_counter_ = 0
-        # which indicate an epoch based validation is done
-        while validation_loader.dataset.epochs_completed <= self._epoch_counter:
-            eval_image_batch, eval_label_batch = validation_loader.next_batch(batch_size=self._eval_batch_size)
-            X_batch, y_batch = Variable(eval_image_batch.float()), Variable(eval_label_batch.long())
-            output = self.network(X_batch)
-            prec1_tmp, prec5_tmp = accuracy(output.data, eval_label_batch.long(), topk=(1, 5))
-            prec1_counter_ += prec1_tmp
-            prec5_counter_ += prec5_tmp
+        for data, y_batch in test_loader:
+            data, target = Variable(data, volatile=True), Variable(y_batch)
+            output = self.network(data)
+            test_loss += F.nll_loss(output, target, size_average=False).data[0] # sum up batch loss
+            #pred = output.data.max(1, keepdim=True)[1] # get the index of the max log-probability
+            #correct += pred.eq(target.data.view_as(pred)).cpu().sum()
+            prec1_tmp, prec5_tmp = accuracy(output.data, y_batch, topk=(1, 5))
+            prec1_counter_ += prec1_tmp.numpy()[0]
+            prec5_counter_ += prec5_tmp.numpy()[0]
             batch_counter_ += 1
         prec1 = prec1_counter_ / batch_counter_
         prec5 = prec5_counter_ / batch_counter_
-        self._epoch_counter = validation_loader.dataset.epochs_completed
-        print('Testset Performance: Cur Step:{} Prec@1: {} Prec@5: {}'.format(self._next_step_to_fetch, prec1.numpy()[0], prec5.numpy()[0]))
+        test_loss /= len(test_loader.dataset)
+        print('Test set: Average loss: {:.4f}, Prec@1: {} Prec@5: {}'.format(test_loss, prec1, prec5))
 
     def _load_model(self, file_path):
         with open(file_path, "rb") as f_:
@@ -113,15 +116,21 @@ class DistributedEvaluator(NN_Trainer):
 if __name__ == "__main__":
     # this is only a simple test case
     args = add_fit_args(argparse.ArgumentParser(description='PyTorch Distributed Evaluator'))
-    # fetch dataset
+
+    # load training and test set here:
     if args.dataset == "MNIST":
-        mnist_data = mnist.read_data_sets(train_dir='./mnist_data', reshape=True)
-        validation_set = MNISTDataset(dataset=mnist_data.validation, transform=transforms.ToTensor())
+        test_loader = torch.utils.data.DataLoader(
+            datasets.MNIST('../data', train=False, transform=transforms.Compose([
+                       transforms.ToTensor(),
+                       transforms.Normalize((0.1307,), (0.3081,))
+                   ])), batch_size=args.test_batch_size, shuffle=True)
     elif args.dataset == "Cifar10":
-        cifar10_data = cifar10.read_data_sets(padding_size=0, reshape=True)
-        validation_set = Cifar10Dataset(dataset=cifar10_data.validation, transform=transforms.ToTensor())
+        test_loader = torch.utils.data.DataLoader(
+            datasets.CIFAR10('./cifar10_data', train=False, transform=transforms.Compose([
+                       transforms.ToTensor(),  transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                   ])), batch_size=args.test_batch_size, shuffle=True)
     
     kwargs_evaluator={'model_dir':args.model_dir, 'eval_freq':args.eval_freq, 'eval_batch_size':args.eval_batch_size}
     evaluator_nn = DistributedEvaluator(**kwargs_evaluator)
-    evaluator_nn.evaluate(validation_loader=validation_set)
+    evaluator_nn.evaluate(validation_loader=test_loader)
     print("I am worker: {} in all {} workers".format(worker_fc_nn.rank, worker_fc_nn.world_size))

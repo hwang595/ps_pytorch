@@ -84,6 +84,7 @@ class DistributedWorkerNormal(NN_Trainer):
         self.comm_type = kwargs['comm_method']
         self.kill_threshold = kwargs['kill_threshold']
         self._eval_batch_size = 100
+        self._eval_freq = kwargs['eval_freq']
 
         # this one is going to be used to avoid fetch the weights for multiple times
         self._layer_cur_step = []
@@ -120,7 +121,6 @@ class DistributedWorkerNormal(NN_Trainer):
         epoch_avg_loss = 0
         iteration_last_step=0
         iter_start_time=0
-
         first = True
 
         print("Worker {}: starting training".format(self.rank))
@@ -195,10 +195,9 @@ class DistributedWorkerNormal(NN_Trainer):
                     print('Worker: {}, Cur Step: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, FetchWeight: {:.4f}, Forward: {:.4f}, Backward: {:.4f}'.format(self.rank,
                             self.cur_step, num_epoch, batch_idx * self.batch_size, len(train_loader.dataset), 
                             (100. * (batch_idx * self.batch_size) / len(train_loader.dataset)), loss.data[0], time.time()-iter_start_time, fetch_weight_duration, forward_duration, backward_duration))
-                    # calculate training accuracy
-                    if self.cur_step % 200 == 0:
-                        print("Worker evaluating the model ... ")
-                        self._evaluate_model(test_loader)
+                    # save model for validation in a pre-specified frequency
+                    if self.cur_step%self._eval_freq == 0:
+                        self._save_model(file_path=self._generate_model_path())
                     # break here to fetch data then enter fetching step loop again
                     break
                 '''
@@ -294,23 +293,14 @@ class DistributedWorkerNormal(NN_Trainer):
         prec5 = prec5_counter_ / batch_counter_
         test_loss /= len(test_loader.dataset)
         print('Test set: Average loss: {:.4f}, Prec@1: {} Prec@5: {}'.format(test_loss, prec1, prec5))
-        '''
-        self.network.eval()
-        prec1_counter_ = prec5_counter_ = batch_counter_ = 0
-        # which indicate an epoch based validation is done
-        while validation_loader.dataset.epochs_completed <= self._epoch_counter:
-            eval_image_batch, eval_label_batch = validation_loader.next_batch(batch_size=self._eval_batch_size)
-            X_batch, y_batch = Variable(eval_image_batch.float()), Variable(eval_label_batch.long())
-            output = self.network(X_batch)
-            prec1_tmp, prec5_tmp = accuracy(output.data, eval_label_batch.long(), topk=(1, 5))
-            prec1_counter_ += prec1_tmp
-            prec5_counter_ += prec5_tmp
-            batch_counter_ += 1
-        prec1 = prec1_counter_ / batch_counter_
-        prec5 = prec5_counter_ / batch_counter_
-        self._epoch_counter = validation_loader.dataset.epochs_completed
-        print('Testset Performance: Cur Step:{} Prec@1: {} Prec@5: {}'.format(self.cur_step, prec1.numpy()[0], prec5.numpy()[0]))
-        '''
+
+    def _generate_model_path(self):
+        return self._train_dir+"model_step_"+str(self.cur_step)
+
+    def _save_model(self, file_path):
+        with open(file_path, "wb") as f_:
+            torch.save(self.network, f_)
+        return
 
 if __name__ == "__main__":
     # this is only a simple test case
