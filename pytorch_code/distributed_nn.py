@@ -116,7 +116,7 @@ if __name__ == "__main__":
                 'eval_freq':args.eval_freq, 'train_dir':args.train_dir, 'max_steps':args.max_steps}
 
     kwargs_worker = {'batch_size':args.batch_size, 'learning_rate':args.lr, 'max_epochs':args.epochs, 'momentum':args.momentum, 'network':args.network,
-                'comm_method':args.comm_type, 'kill_threshold':args.kill_threshold, 'eval_freq':args.eval_freq}
+                'comm_method':args.comm_type, 'kill_threshold':args.kill_threshold, 'eval_freq':args.eval_freq, 'train_dir':args.train_dir}
 
     if rank == 0:
         if args.mode == "normal":

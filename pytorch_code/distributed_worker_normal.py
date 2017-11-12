@@ -85,6 +85,7 @@ class DistributedWorkerNormal(NN_Trainer):
         self.kill_threshold = kwargs['kill_threshold']
         self._eval_batch_size = 100
         self._eval_freq = kwargs['eval_freq']
+        self._train_dir = kwargs['train_dir']
 
         # this one is going to be used to avoid fetch the weights for multiple times
         self._layer_cur_step = []
@@ -196,7 +197,7 @@ class DistributedWorkerNormal(NN_Trainer):
                             self.cur_step, num_epoch, batch_idx * self.batch_size, len(train_loader.dataset), 
                             (100. * (batch_idx * self.batch_size) / len(train_loader.dataset)), loss.data[0], time.time()-iter_start_time, fetch_weight_duration, forward_duration, backward_duration))
                     # save model for validation in a pre-specified frequency
-                    if self.cur_step%self._eval_freq == 0:
+                    if self.cur_step%self._eval_freq == 0 and if self.rank == 1:
                         self._save_model(file_path=self._generate_model_path())
                     # break here to fetch data then enter fetching step loop again
                     break
