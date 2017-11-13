@@ -197,8 +197,9 @@ class DistributedWorkerNormal(NN_Trainer):
                             self.cur_step, num_epoch, batch_idx * self.batch_size, len(train_loader.dataset), 
                             (100. * (batch_idx * self.batch_size) / len(train_loader.dataset)), loss.data[0], time.time()-iter_start_time, fetch_weight_duration, forward_duration, backward_duration))
                     # save model for validation in a pre-specified frequency
-                    if self.cur_step%self._eval_freq == 0 and self.rank == 1:
-                        self._save_model(file_path=self._generate_model_path())
+                    if self.cur_step%self._eval_freq == 0:
+                        #self._save_model(file_path=self._generate_model_path())
+			self._evaluate_model(test_loader)
                     # break here to fetch data then enter fetching step loop again
                     break
                 '''
