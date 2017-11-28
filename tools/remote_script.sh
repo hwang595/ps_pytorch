@@ -1,6 +1,6 @@
 KEY_PEM_NAME=HongyiScript.pem
 export DEEPLEARNING_WORKERS_COUNT=`wc -l < hosts`
-cd ~/pytorch_distributed_nn/pytorch_code/
+cd ~/pytorch_distributed_nn/src/
 python data_prepare.py
 cd ~
 
@@ -16,7 +16,7 @@ for i in $(seq 2 $DEEPLEARNING_WORKERS_COUNT);
   do
   scp -i ${KEY_PEM_NAME} id_rsa.pub deeplearning-worker${i}:~/.ssh
   ssh -i ${KEY_PEM_NAME} deeplearning-worker${i} 'git clone https://github.com/hwang595/pytorch_distributed_nn.git; cd ~/.ssh; cat id_rsa.pub >> authorized_keys'
-  scp -i ${KEY_PEM_NAME} -r ~/pytorch_distributed_nn/pytorch_code/mnist_data deeplearning-worker${i}:~/pytorch_distributed_nn/pytorch_code/
-  scp -i ${KEY_PEM_NAME} -r ~/pytorch_distributed_nn/pytorch_code/cifar10_data deeplearning-worker${i}:~/pytorch_distributed_nn/pytorch_code/
+  scp -i ${KEY_PEM_NAME} -r ~/pytorch_distributed_nn/src/mnist_data deeplearning-worker${i}:~/pytorch_distributed_nn/src/
+  scp -i ${KEY_PEM_NAME} -r ~/pytorch_distributed_nn/src/cifar10_data deeplearning-worker${i}:~/pytorch_distributed_nn/src/
   echo "Done writing public key to worker: deeplearning-worker${i}"
  done

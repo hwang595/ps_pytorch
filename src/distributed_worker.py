@@ -161,15 +161,14 @@ class DistributedWorker(NN_Trainer):
                 fetch_weight_duration, forward_duration, backward_duration, prec1, prec5=self.training_process(train_loader)
 
             # on the end of a certain iteration
-            print('Worker: {}, Cur Step: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, Prec@1: {}, Prec@5: {}'.format(self.rank,
-                 self.cur_step, self._epoch_idx, self._batch_idx * self.batch_size, self.batch_size*self._num_batch_per_epoch, 
-                 (100. * (self._batch_idx * self.batch_size) / (self.batch_size*self._num_batch_per_epoch)), self._loss_data, time.time()-iter_start_time, prec1.numpy()[0], prec5.numpy()[0]))
-            '''
+            #print('Worker: {}, Cur Step: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, Prec@1: {}, Prec@5: {}'.format(self.rank,
+            #     self.cur_step, self._epoch_idx, self._batch_idx * self.batch_size, self.batch_size*self._num_batch_per_epoch, 
+            #     (100. * (self._batch_idx * self.batch_size) / (self.batch_size*self._num_batch_per_epoch)), self._loss_data, time.time()-iter_start_time, prec1.numpy()[0], prec5.numpy()[0]))
+            
             print('Worker: {}, Cur Step: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, FetchWeight: {:.4f}, Forward: {:.4f}, Backward: {:.4f}'.format(self.rank,
                     self.cur_step, self._epoch_idx, self._batch_idx * self.batch_size, self.batch_size*self._num_batch_per_epoch, 
                     (100. * (self._batch_idx * self.batch_size) / (self.batch_size*self._num_batch_per_epoch)), self._loss_data, time.time()-iter_start_time, fetch_weight_duration, forward_duration, backward_duration))
-            '''
-
+            
     def training_process(self, train_loader):
         fetch_weight_start_time = time.time()
         if self.comm_type == "Bcast":
