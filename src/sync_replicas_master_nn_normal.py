@@ -1,6 +1,7 @@
 from __future__ import print_function
 import time
 import copy
+from sys import getsizeof
 
 from mpi4py import MPI
 import numpy as np
