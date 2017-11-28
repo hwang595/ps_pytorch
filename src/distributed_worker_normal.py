@@ -15,6 +15,7 @@ from torch.autograd import Variable
 import time
 from datetime import datetime
 import copy
+from sys import getsizeof
 
 STEP_START_ = 1
 
