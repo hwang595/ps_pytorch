@@ -10,6 +10,7 @@ from nn_ops import NN_Trainer
 from model_ops.lenet import LeNet, LeNetSplit
 from model_ops.resnet import *
 from model_ops.resnet_split import *
+from compress_gradient import decompress
 
 import torch
 
@@ -23,6 +24,7 @@ def update_params_dist_version(param, avg_grad, learning_rate):
 	assert param.shape == avg_grad.shape
 	param -= learning_rate * avg_grad
 	return param
+
 
 def accuracy(output, target, topk=(1,)):
 	"""Computes the precision@k for the specified values of k"""
@@ -39,39 +41,29 @@ def accuracy(output, target, topk=(1,)):
 		res.append(correct_k.mul_(100.0 / batch_size))
 	return res
 
+
 class GradientAccumulator(object):
 	'''a simple class to implement gradient aggregator like the `Conditional Accumulators` in tensorflow'''
-	def __init__(self, module, num_worker):
+	def __init__(self, module, num_worker, mode='None'):
 		# we will update this counter dynamically during the training process
 		# the length of this counter should be number of fc layers in the network
-		
-		'''
-		model_length = len(module.state_dict())
-		self.gradient_aggregate_counter = [0] * model_length
-		self.model_index_range = [i for i in range(model_length)]
-		'''
-
 		# we used list to contain gradients of layers
 		self.gradient_aggregate_counter = []
 		self.model_index_range = []
 		self.gradient_aggregator = []
-
-
-		# TODO(hwang): we do not need to allocate so many space here since we need
-		# to aggregate the gradient into each slot
-		# for similar reason to worker side, we temporarily change this to the version without batch norm
-		'''
-		for param_idx,(key_name, param) in enumerate(module.state_dict().items()):
-			tmp_aggregator = []
-			for worker_idx in range(num_worker):
-				tmp_aggregator.append(np.zeros((param.size())))
-			# initialize the gradient aggragator
-			self.gradient_aggregator.append(tmp_aggregator)
-		'''
+		self._mode = mode
+		
 		for param_idx, param in enumerate(module.parameters()):
 			tmp_aggregator = []
 			for worker_idx in range(num_worker):
-				tmp_aggregator.append(np.zeros((param.size())))
+				if self._mode == 'None':
+					tmp_aggregator.append(np.zeros((param.size())))
+				elif self._mode == 'compress':
+					_shape = param.size()
+					if len(_shape) == 1:
+						tmp_aggregator.append(bytearray(getsizeof(np.zeros((_shape[0]*2,)))))
+					else:
+						tmp_aggregator.append(bytearray(getsizeof(np.zeros(_shape))))
 			# initialize the gradient aggragator
 			self.gradient_aggregator.append(tmp_aggregator)
 			self.gradient_aggregate_counter.append(0)
@@ -85,10 +77,16 @@ class GradientAccumulator(object):
 		self.gradient_aggregate_counter = [0 for _ in self.gradient_aggregate_counter]
 
 	def _meset_grad_aggregator(self):
-		'''reset the buffers in grad accumulator, not sure if this is necessary'''
-		for i, tmp_aggregator in enumerate(self.gradient_aggregator):
-			for j, buf in enumerate(tmp_aggregator):
-				self.gradient_aggregator[i][j] = np.zeros(self.gradient_aggregator[i][j].shape)
+		'''
+		reset the buffers in grad accumulator, not sure if this is necessary
+		'''
+		if self._mode == 'compress':
+			pass
+		else:
+			for i, tmp_aggregator in enumerate(self.gradient_aggregator):
+				for j, buf in enumerate(tmp_aggregator):
+					self.gradient_aggregator[i][j] = np.zeros(self.gradient_aggregator[i][j].shape)
+
 
 class SyncReplicasMasterNormal_NN(NN_Trainer):
 	def __init__(self, comm, **kwargs):
@@ -111,6 +109,7 @@ class SyncReplicasMasterNormal_NN(NN_Trainer):
 		self._train_dir = kwargs['train_dir']
 		self._expected_grad_to_recv = kwargs['kill_threshold']
 		self._max_steps = kwargs['max_steps']
+		self._compress_grad = kwargs['compress_grad']
 
 		############ will be deprecated soon #############################
 		self._eval_batch_size = 1000
@@ -127,10 +126,10 @@ class SyncReplicasMasterNormal_NN(NN_Trainer):
 		# TODO(hwang): make sure this is useful
 		self.optimizer = torch.optim.SGD(self.network.parameters(), lr=self.lr, momentum=self.momentum)
 		# assign a gradient accumulator to collect gradients from workers
-		self.grad_accumulator = GradientAccumulator(module=self.network, num_worker=self.world_size-1)
+		self.grad_accumulator = GradientAccumulator(self.network, self.world_size-1, self._compress_grad)
 		self.init_model_shapes()
 
-	def train(self):
+	def start(self):
 		# the first step we need to do here is to sync fetch the inital worl_step from the parameter server
 		# we still need to make sure the value we fetched from parameter server is 1
 		# please note that step is start from one here
@@ -158,7 +157,11 @@ class SyncReplicasMasterNormal_NN(NN_Trainer):
 			# wait for enough gradients to be aggregated:
 			while not enough_gradients_received:
 				status = MPI.Status()
-				MPI.Request.Waitany(requests=gradient_fetch_requests, status=status)
+				if self._compress_grad == "None":
+					MPI.Request.Waitany(requests=gradient_fetch_requests, status=status)
+				elif self._compress_grad == "compress":
+					_, received_msg=MPI.Request.waitany(requests=gradient_fetch_requests, status=status)
+					received_grad=decompress(received_msg)
 
 				if status.tag-88 in self.grad_accumulator.model_index_range:
 					if not self._first_grad_received:
@@ -166,7 +169,8 @@ class SyncReplicasMasterNormal_NN(NN_Trainer):
 						grad_gather_start_time = time.time()
 
 					layer_index = status.tag-88
-					received_grad=self.grad_accumulator.gradient_aggregator[layer_index][status.source-1]
+					if self._compress_grad == "None":
+						received_grad=self.grad_accumulator.gradient_aggregator[layer_index][status.source-1]
 					
 					# do gradient shape check here
 					assert (received_grad.shape == self._model_shapes[layer_index])
@@ -258,9 +262,10 @@ class SyncReplicasMasterNormal_NN(NN_Trainer):
 		gradient_fetch_requests = [] # `graident_fetch_request` should have length of #fc_layer*num_grad_to_collect
 		for layer_idx, layer in enumerate(self.network.parameters()):
 			for k in range(self._num_grad_to_collect):
-				#print(88+layer_idx, layer_idx)
-				req = self.comm.Irecv([self.grad_accumulator.gradient_aggregator[layer_idx][k], MPI.DOUBLE], source=MPI.ANY_SOURCE, tag=88+layer_idx)
-				#req = self.comm.Irecv([self.grad_accumulator.gradient_aggregator[layer_idx][k], MPI.FLOAT], source=MPI.ANY_SOURCE, tag=88+layer_idx)
+				if self._compress_grad == 'compress':
+					req = self.comm.irecv(self.grad_accumulator.gradient_aggregator[layer_idx][k], source=k+1, tag=88+layer_idx)
+				else:
+					req = self.comm.Irecv([self.grad_accumulator.gradient_aggregator[layer_idx][k], MPI.DOUBLE], source=k+1, tag=88+layer_idx)
 				gradient_fetch_requests.append(req)
 		return gradient_fetch_requests
 

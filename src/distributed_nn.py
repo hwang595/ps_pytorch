@@ -12,10 +12,6 @@ from mpi4py import MPI
 import torch
 from torch.autograd import Variable
 from torch import nn
-from distributed_functions.distributed_backward import backward
-from torch.nn.parallel.replicate import replicate
-from torch.nn.parallel.scatter_gather import scatter_kwargs, gather
-from torch.nn.parallel.parallel_apply import parallel_apply
 import torch.nn.functional as F
 
 from torchvision import datasets, transforms
@@ -74,6 +70,8 @@ def add_fit_args(parser):
                         help='it determines per how many step the model should be evaluated')
     parser.add_argument('--train-dir', type=str, default='output/models/', metavar='N',
                         help='directory to save the temp model during the training process for evaluation')
+    parser.add_argument('--compress-grad', type=str, default='compress', metavar='N',
+                        help='compress/none indicate if we compress the gradient matrix before communication') 
     args = parser.parse_args()
     return args
 
@@ -113,10 +111,10 @@ if __name__ == "__main__":
 
     kwargs_master = {'batch_size':args.batch_size, 'learning_rate':args.lr, 'max_epochs':args.epochs, 'momentum':args.momentum, 'network':args.network,
                 'comm_method':args.comm_type, 'kill_threshold': args.num_aggregate, 'timeout_threshold':args.kill_threshold,
-                'eval_freq':args.eval_freq, 'train_dir':args.train_dir, 'max_steps':args.max_steps}
+                'eval_freq':args.eval_freq, 'train_dir':args.train_dir, 'max_steps':args.max_steps, 'compress_grad':args.compress_grad}
 
     kwargs_worker = {'batch_size':args.batch_size, 'learning_rate':args.lr, 'max_epochs':args.epochs, 'momentum':args.momentum, 'network':args.network,
-                'comm_method':args.comm_type, 'kill_threshold':args.kill_threshold, 'eval_freq':args.eval_freq, 'train_dir':args.train_dir}
+                'comm_method':args.comm_type, 'kill_threshold':args.kill_threshold, 'eval_freq':args.eval_freq, 'train_dir':args.train_dir, 'compress_grad':args.compress_grad}
 
     if rank == 0:
         if args.mode == "normal":
@@ -125,7 +123,7 @@ if __name__ == "__main__":
             master_fc_nn = SyncReplicasMaster_NN(comm=comm, **kwargs_master)
         master_fc_nn.build_model()
         print("I am the master: the world size is {}, cur step: {}".format(master_fc_nn.world_size, master_fc_nn.cur_step))
-        master_fc_nn.train()
+        master_fc_nn.start()
         print("Done sending messages to workers!")
     else:
         if args.mode == "normal":

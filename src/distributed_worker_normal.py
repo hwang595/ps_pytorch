@@ -7,6 +7,7 @@ from nn_ops import NN_Trainer
 from model_ops.lenet import LeNet, LeNetSplit
 from model_ops.resnet import *
 from model_ops.resnet_split import *
+from compress_gradient import compress
 
 import torch
 from torch.autograd import Variable
@@ -54,11 +55,9 @@ class ModelBuffer(object):
         """
         self.recv_buf = []
         self.layer_cur_step = []
-        '''initialize space to receive model from parameter server'''
-        #for key_name, param in network.state_dict().items():
-        #    self.recv_buf.append(np.zeros(param.size()))
-        #    self.layer_cur_step.append(0)
-
+        '''
+        initialize space to receive model from parameter server
+        '''
         # consider we don't want to update the param of `BatchNorm` layer right now
         # we temporirially deprecate the foregoing version and only update the model
         # parameters
@@ -86,6 +85,7 @@ class DistributedWorkerNormal(NN_Trainer):
         self._eval_batch_size = 100
         self._eval_freq = kwargs['eval_freq']
         self._train_dir = kwargs['train_dir']
+        self._compress_grad = kwargs['compress_grad']
 
         # this one is going to be used to avoid fetch the weights for multiple times
         self._layer_cur_step = []
@@ -184,10 +184,14 @@ class DistributedWorkerNormal(NN_Trainer):
                     init_grad_data = logits_1.grad.data.numpy()
                     init_grad_data = np.sum(init_grad_data, axis=0).astype(np.float64)
                     # send grad to parameter server
-                    req_isend = self.comm.Isend([init_grad_data, MPI.DOUBLE], dest=0, tag=88+self._param_idx)
+                    if self._compress_grad=='compress':
+                        _compressed_grad = compress(init_grad_data)
+                        req_isend = self.comm.isend(_compressed_grad, dest=0, tag=88+self._param_idx)
+                    else:
+                        req_isend = self.comm.Isend([init_grad_data, MPI.DOUBLE], dest=0, tag=88+self._param_idx)
                     req_send_check.append(req_isend)
                     
-                    req_send_check=self.network.backward_normal(logits_1.grad, communicator=self.comm, req_send_check=req_send_check, cur_step=self.cur_step)
+                    req_send_check=self.network.backward_normal(logits_1.grad, self.comm, req_send_check, self.cur_step, self._compress_grad)
                     req_send_check[-1].wait()
 
                     backward_duration = time.time()-backward_start_time
@@ -199,7 +203,7 @@ class DistributedWorkerNormal(NN_Trainer):
                     # save model for validation in a pre-specified frequency
                     if self.cur_step%self._eval_freq == 0:
                         #self._save_model(file_path=self._generate_model_path())
-			self._evaluate_model(test_loader)
+                        self._evaluate_model(test_loader)
                     # break here to fetch data then enter fetching step loop again
                     break
                 '''

@@ -135,7 +135,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 		self.grad_accumulator = GradientAccumulator(module=self.network, num_worker=self.world_size-1)
 		self.init_model_shapes()
 
-	def train(self):
+	def start(self):
 		# the first step we need to do here is to sync fetch the inital worl_step from the parameter server
 		# we still need to make sure the value we fetched from parameter server is 1
 		# please note that step is start from one here

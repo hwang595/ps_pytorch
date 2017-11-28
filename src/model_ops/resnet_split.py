@@ -19,6 +19,9 @@ import timeout_decorator
 
 from mpi4py import MPI
 
+sys.path.insert(0, '../compress_gradient')
+from compress_gradient import compress
+
 LAYER_DIGITS= int(1e+3)
 TIMEOUT_THRESHOLD_=10
 
@@ -359,7 +362,7 @@ class ResNetSplit(nn.Module):
                     mod_avail_index-=1
         return req_send_check
 
-    def backward_normal(self, g, communicator, req_send_check, cur_step):
+    def backward_normal(self, g, communicator, req_send_check, cur_step, compress_grad):
         mod_avail_index = len(self.full_modules)-1
         channel_index = self._init_channel_index-2
         mod_counters_ = [0]*len(self.full_modules)
@@ -373,7 +376,13 @@ class ResNetSplit(nn.Module):
                 tmp_grad = self.full_modules[mod_avail_index].weight.grad
                 if not pd.isnull(tmp_grad):
                     grads = tmp_grad.data.numpy().astype(np.float64)
-                    req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                    ######################################################################################
+                    if compress_grad == 'compress':
+                        _compressed_grad = compress(grads)
+                        req_isend = communicator.isend(_compressed_grad, dest=0, tag=88+channel_index)
+                    else:
+                        req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                    ######################################################################################
                     req_send_check.append(req_isend)
                     # update counters
                     mod_avail_index-=1
@@ -393,7 +402,13 @@ class ResNetSplit(nn.Module):
 
                     if not pd.isnull(tmp_grad_weight):
                         grads = tmp_grad_weight.data.numpy().astype(np.float64)
-                        req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                        ######################################################################################
+                        if compress_grad == 'compress':
+                            _compressed_grad = compress(grads)
+                            req_isend = communicator.isend(_compressed_grad, dest=0, tag=88+channel_index)
+                        else:
+                            req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                        ######################################################################################
                         req_send_check.append(req_isend)
                         channel_index-=1
                         mod_counters_[mod_avail_index]=2
@@ -409,13 +424,25 @@ class ResNetSplit(nn.Module):
                         # we always send bias first
                         if mod_counters_[mod_avail_index] == 0:
                             grads = tmp_grad_bias.data.numpy().astype(np.float64)
-                            req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                            ######################################################################################
+                            if compress_grad == 'compress':
+                                _compressed_grad = compress(grads)
+                                req_isend = communicator.isend(_compressed_grad, dest=0, tag=88+channel_index)
+                            else:
+                                req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                            ######################################################################################
                             req_send_check.append(req_isend)
                             channel_index-=1
                             mod_counters_[mod_avail_index]+=1
                         elif mod_counters_[mod_avail_index] == 1:
                             grads = tmp_grad_weight.data.numpy().astype(np.float64)
-                            req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                            ######################################################################################
+                            if compress_grad == 'compress':
+                                _compressed_grad = compress(grads)
+                                req_isend = communicator.isend(_compressed_grad, dest=0, tag=88+channel_index)
+                            else:
+                                req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                            ######################################################################################
                             req_send_check.append(req_isend)
                             channel_index-=1
                             mod_counters_[mod_avail_index]+=1
@@ -429,7 +456,13 @@ class ResNetSplit(nn.Module):
             if pd.isnull(self.full_modules[mod_avail_index].bias):
                 tmp_grad_weight = self.full_modules[mod_avail_index].weight.grad
                 grads = tmp_grad_weight.data.numpy().astype(np.float64)
-                req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                ######################################################################################
+                if compress_grad == 'compress':
+                    _compressed_grad = compress(grads)
+                    req_isend = communicator.isend(_compressed_grad, dest=0, tag=88+channel_index)
+                else:
+                    req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                ######################################################################################
                 req_send_check.append(req_isend)
                 channel_index-=1
                 mod_counters_[mod_avail_index]=2
@@ -441,13 +474,25 @@ class ResNetSplit(nn.Module):
                 # we always send bias first
                 if mod_counters_[mod_avail_index] == 0:
                     grads = tmp_grad_bias.data.numpy().astype(np.float64)
-                    req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                    ######################################################################################
+                    if compress_grad == 'compress':
+                        _compressed_grad = compress(grads)
+                        req_isend = communicator.isend(_compressed_grad, dest=0, tag=88+channel_index)
+                    else:
+                        req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                    ######################################################################################
                     req_send_check.append(req_isend)
                     channel_index-=1
                     mod_counters_[mod_avail_index]+=1
                 elif mod_counters_[mod_avail_index] == 1:
                     grads = tmp_grad_weight.data.numpy().astype(np.float64)
-                    req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                    ######################################################################################
+                    if compress_grad == 'compress':
+                        _compressed_grad = compress(grads)
+                        req_isend = communicator.isend(_compressed_grad, dest=0, tag=88+channel_index)
+                    else:
+                        req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                    ######################################################################################
                     req_send_check.append(req_isend)
                     channel_index-=1
                     mod_counters_[mod_avail_index]+=1
