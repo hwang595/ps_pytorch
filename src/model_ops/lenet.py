@@ -124,7 +124,7 @@ class LeNetSplit(nn.Module):
                     ###############################################################################################
                     if compress_grad == 'compress':
                         _compressed_grad = compress(grads)
-                        req_isend = communicator.Isend([_compressed_grad, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                        req_isend = communicator.isend(_compressed_grad, dest=0, tag=88+channel_index)
                     else:
                         req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
                     ################################################################################################
@@ -145,7 +145,7 @@ class LeNetSplit(nn.Module):
                         ###############################################################################################
                         if compress_grad == 'compress':
                             _compressed_grad = compress(grads)
-                            req_isend = communicator.Isend([_compressed_grad, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                            req_isend = communicator.isend(_compressed_grad, dest=0, tag=88+channel_index)
                         else:
                             req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
                         ################################################################################################
@@ -157,7 +157,7 @@ class LeNetSplit(nn.Module):
                         ###############################################################################################
                         if compress_grad == 'compress':
                             _compressed_grad = compress(grads)
-                            req_isend = communicator.Isend([_compressed_grad, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                            req_isend = communicator.isend(_compressed_grad, dest=0, tag=88+channel_index)
                         else:
                             req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
                         ################################################################################################
@@ -174,7 +174,7 @@ class LeNetSplit(nn.Module):
             ###############################################################################################
             if compress_grad == 'compress':
                 _compressed_grad = compress(grads)
-                req_isend = communicator.Isend([_compressed_grad, MPI.DOUBLE], dest=0, tag=88+channel_index)
+                req_isend = communicator.isend(_compressed_grad, dest=0, tag=88+channel_index)
             else:
                 req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
             ################################################################################################
