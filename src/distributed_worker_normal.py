@@ -249,8 +249,7 @@ class DistributedWorkerNormal(NN_Trainer):
         for layer_idx, layer in enumerate(self.model_recv_buf.recv_buf):
             if self.model_recv_buf.layer_cur_step[layer_idx] < self.cur_step:
                 layers_to_update.append(layer_idx)
-                #self.comm.Bcast([self.model_recv_buf.recv_buf[layer_idx], MPI.DOUBLE], root=0)
-                self.comm.Ibcast([self.model_recv_buf.recv_buf[layer_idx], MPI.DOUBLE], root=0)
+                self.comm.Bcast([self.model_recv_buf.recv_buf[layer_idx], MPI.DOUBLE], root=0)
         weights_to_update = []
         for req_idx, layer_idx in enumerate(layers_to_update):
             weights = self.model_recv_buf.recv_buf[req_idx]

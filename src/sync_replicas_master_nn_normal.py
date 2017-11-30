@@ -248,8 +248,7 @@ class SyncReplicasMasterNormal_NN(NN_Trainer):
 			request_workers = []
 			layer_to_send = layer.data.numpy().astype(np.float64)
 			# try to see if collective communication is better here:
-			#self.comm.Bcast([layer_to_send, MPI.DOUBLE], root=0)
-			self.comm.Ibcast([layer_to_send, MPI.DOUBLE], root=0)
+			self.comm.Bcast([layer_to_send, MPI.DOUBLE], root=0)
 
 	def async_fetch_gradient_start(self):
 		'''make gradient fetch requests and return the request list'''
