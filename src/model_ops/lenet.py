@@ -179,6 +179,9 @@ class LeNetSplit(nn.Module):
                 req_isend = communicator.Isend([grads, MPI.DOUBLE], dest=0, tag=88+channel_index)
             ################################################################################################
             req_send_check.append(req_isend)
+        # for debugging here:
+        for req in req_send_check:
+            req.wait()
         return req_send_check
 
     def backward_signal_kill(self, g, communicator, req_send_check, cur_step):
