@@ -15,7 +15,6 @@ from torch.autograd import Variable
 
 import pandas as pd
 import numpy as np
-import timeout_decorator
 
 from mpi4py import MPI
 
@@ -615,7 +614,6 @@ class ResNetSplit(nn.Module):
             killed = True
         return req_send_check, killed
 
-    @timeout_decorator.timeout(10.5, timeout_exception=StopIteration)
     def backward_timeout_kill(self, g, communicator, req_send_check, cur_step):
         mod_avail_index = len(self.full_modules)-1
         channel_index = self._init_channel_index-2

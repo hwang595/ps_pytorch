@@ -4,7 +4,6 @@ import copy
 
 from mpi4py import MPI
 import numpy as np
-import timeout_decorator
 
 from nn_ops import NN_Trainer
 

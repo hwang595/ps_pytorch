@@ -25,10 +25,7 @@ from distributed_worker_normal import *
 from sync_replicas_master_nn_normal import *
 
 #for tmp solution
-from mnist import mnist
-from datasets import MNISTDataset
-from cifar10 import cifar10
-from datasets import Cifar10Dataset
+from datasets import MNISTDataset, Cifar10Dataset
 
 def add_fit_args(parser):
     """

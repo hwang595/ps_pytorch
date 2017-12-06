@@ -5,10 +5,7 @@ This script will do the job for you
 import torch
 from torchvision import datasets, transforms
 #for tmp solution
-from mnist import mnist
-from datasets import MNISTDataset
-from cifar10 import cifar10
-from datasets import Cifar10Dataset
+from datasets import MNISTDataset, Cifar10Dataset
 
 
 if __name__ == "__main__":
