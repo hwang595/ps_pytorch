@@ -21,8 +21,6 @@ from data_loader_ops.my_data_loader import DataLoader
 
 from distributed_worker import *
 from sync_replicas_master_nn import *
-from distributed_worker_normal import *
-from sync_replicas_master_nn_normal import *
 
 #for tmp solution
 from datasets import MNISTDataset, Cifar10Dataset
@@ -114,19 +112,13 @@ if __name__ == "__main__":
                 'comm_method':args.comm_type, 'kill_threshold':args.kill_threshold, 'eval_freq':args.eval_freq, 'train_dir':args.train_dir, 'compress_grad':args.compress_grad}
 
     if rank == 0:
-        if args.mode == "normal":
-            master_fc_nn = SyncReplicasMasterNormal_NN(comm=comm, **kwargs_master)
-        elif args.mode == "kill":
-            master_fc_nn = SyncReplicasMaster_NN(comm=comm, **kwargs_master)
+        master_fc_nn = SyncReplicasMaster_NN(comm=comm, **kwargs_master)
         master_fc_nn.build_model()
         print("I am the master: the world size is {}, cur step: {}".format(master_fc_nn.world_size, master_fc_nn.cur_step))
         master_fc_nn.start()
         print("Done sending messages to workers!")
     else:
-        if args.mode == "normal":
-            worker_fc_nn = DistributedWorkerNormal(comm=comm, **kwargs_worker)
-        elif args.mode == "kill":
-            worker_fc_nn = DistributedWorker(comm=comm, **kwargs_worker)
+        worker_fc_nn = DistributedWorker(comm=comm, **kwargs_worker)
         worker_fc_nn.build_model()
         print("I am worker: {} in all {} workers, next step: {}".format(worker_fc_nn.rank, worker_fc_nn.world_size-1, worker_fc_nn.next_step))
         worker_fc_nn.train(train_loader=train_loader, test_loader=test_loader)
