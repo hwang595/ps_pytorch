@@ -1,5 +1,5 @@
 # pytorch_distributed_nn
-implement distributed neural network and straggler kill in Pytorch
+implement distributed neural network
 
 # AWS EC2 AMI for distributed Pythorch:
 `ami-ebc83c93` (with pytorch/pytorch vision installed and configured with CUDA 8.0 and cuDNN 7)
