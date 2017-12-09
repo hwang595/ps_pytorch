@@ -9,8 +9,8 @@ from torch.autograd import Variable
 from mpi4py import MPI
 
 import sys
-sys.path.insert(0, '../compress_gradient')
-from compress_gradient import compress
+sys.path.insert(0, '../compression')
+from compression import compress
 
 # we use LeNet here for our simple case
 class LeNet(nn.Module):
