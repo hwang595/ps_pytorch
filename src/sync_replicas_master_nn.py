@@ -11,7 +11,7 @@ from nn_ops import NN_Trainer
 from model_ops.lenet import LeNet, LeNetSplit
 from model_ops.resnet import *
 from model_ops.resnet_split import *
-from compress_gradient import decompress
+from compression import g_decompress, w_compress
 
 import torch
 
@@ -162,7 +162,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 					MPI.Request.Waitany(requests=gradient_fetch_requests, status=status)
 				elif self._compress_grad == "compress":
 					_, received_msg=MPI.Request.waitany(requests=gradient_fetch_requests, status=status)
-					received_grad=decompress(received_msg)
+					received_grad=g_decompress(received_msg)
 
 				if status.tag-88 in self.grad_accumulator.model_index_range:
 					if not self._first_grad_received:
@@ -248,7 +248,10 @@ class SyncReplicasMaster_NN(NN_Trainer):
 			request_workers = []
 			layer_to_send = layer.data.numpy().astype(np.float64)
 			# try to see if collective communication is better here:
-			self.comm.Ibcast([layer_to_send, MPI.DOUBLE], root=0)
+			msg_send = w_compress(layer_to_send)
+			#req=self.comm.Ibcast([layer_to_send, MPI.DOUBLE], root=0)
+			req=self.comm.Ibcast([msg_send, MPI.BYTE], root=0)
+			req.Wait()
 
 	def async_fetch_gradient_start(self):
 		'''make gradient fetch requests and return the request list'''

@@ -26,17 +26,17 @@ cfg = Cfg({
     "n_masters" : 1,                      # Should always be 1
     "n_workers" : 3,
     "num_replicas_to_aggregate" : "8",
-    "method" : "reserved",
+    "method" : "spot",
     # Region speficiation
     "region" : "us-west-2",
     "availability_zone" : "us-west-2b",
     # Machine type - instance type configuration.
-    "master_type" : "t2.large",
-    "worker_type" : "t2.large",
+    "master_type" : "m5.2xlarge",
+    "worker_type" : "m5.2xlarge",
     # please only use this AMI for pytorch
-    "image_id": "ami-1036c268",
+    "image_id": "ami-067aa07e",
     # Launch specifications
-    "spot_price" : "0.8",                 # Has to be a string
+    "spot_price" : "0.16",                 # Has to be a string
     # SSH configuration
     "ssh_username" : "ubuntu",            # For sshing. E.G: ssh ssh_username@hostname
     "path_to_keyfile" : "/home/hwang/My_Code/AWS/HongyiScript.pem",

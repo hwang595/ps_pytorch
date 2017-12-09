@@ -7,7 +7,7 @@ from nn_ops import NN_Trainer
 from model_ops.lenet import LeNet, LeNetSplit
 from model_ops.resnet import *
 from model_ops.resnet_split import *
-from compress_gradient import compress
+from compression import g_compress, w_decompress
 
 import torch
 from torch.autograd import Variable
@@ -56,6 +56,7 @@ class ModelBuffer(object):
         """
         self.recv_buf = []
         self.layer_cur_step = []
+        self.layer_shape = []
         '''
         initialize space to receive model from parameter server
         '''
@@ -63,8 +64,14 @@ class ModelBuffer(object):
         # we temporirially deprecate the foregoing version and only update the model
         # parameters
         for param_idx, param in enumerate(network.parameters()):
-            self.recv_buf.append(np.zeros(param.size()))
+            #self.recv_buf.append(np.zeros(param.size()))
+            _shape = param.size()
+            if len(_shape) == 1:
+                self.recv_buf.append(bytearray(getsizeof(np.zeros((_shape[0]*2,)))))
+            else:
+                self.recv_buf.append(bytearray(getsizeof(np.zeros(_shape))))
             self.layer_cur_step.append(0)
+            self.layer_shape.append(_shape)
 
 
 class DistributedWorker(NN_Trainer):
@@ -186,7 +193,7 @@ class DistributedWorker(NN_Trainer):
                     init_grad_data = np.sum(init_grad_data, axis=0).astype(np.float64)
                     # send grad to parameter server
                     if self._compress_grad=='compress':
-                        _compressed_grad = compress(init_grad_data)
+                        _compressed_grad = g_compress(init_grad_data)
                         req_isend = self.comm.isend(_compressed_grad, dest=0, tag=88+self._param_idx)
                     else:
                         req_isend = self.comm.Isend([init_grad_data, MPI.DOUBLE], dest=0, tag=88+self._param_idx)
@@ -249,10 +256,13 @@ class DistributedWorker(NN_Trainer):
         for layer_idx, layer in enumerate(self.model_recv_buf.recv_buf):
             if self.model_recv_buf.layer_cur_step[layer_idx] < self.cur_step:
                 layers_to_update.append(layer_idx)
-                self.comm.Ibcast([self.model_recv_buf.recv_buf[layer_idx], MPI.DOUBLE], root=0)
+                #self.comm.Ibcast([self.model_recv_buf.recv_buf[layer_idx], MPI.DOUBLE], root=0)
+                req=self.comm.Ibcast([self.model_recv_buf.recv_buf[layer_idx], MPI.BYTE], root=0)
+                req.Wait()
         weights_to_update = []
         for req_idx, layer_idx in enumerate(layers_to_update):
-            weights = self.model_recv_buf.recv_buf[req_idx]
+            # decompress the received weights
+            weights = w_decompress(self.model_recv_buf.recv_buf[req_idx], self.model_recv_buf.layer_shape[req_idx])
             weights_to_update.append(weights)
             # we also need to update the layer cur step here:
             self.model_recv_buf.layer_cur_step[req_idx] = self.cur_step
