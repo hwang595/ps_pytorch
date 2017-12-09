@@ -249,7 +249,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 			layer_to_send = layer.data.numpy().astype(np.float64)
 			# try to see if collective communication is better here:
 			msg_send = w_compress(layer_to_send)
-			self.comm.Bcast([layer_to_send, MPI.BYTE], root=0)
+			self.comm.Bcast([msg_send, MPI.BYTE], root=0)
 			#req=self.comm.Ibcast([layer_to_send, MPI.DOUBLE], root=0)
 			#req=self.comm.Ibcast([msg_send, MPI.BYTE], root=0)
 			#req.Wait()
