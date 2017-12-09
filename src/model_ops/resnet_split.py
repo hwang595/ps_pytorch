@@ -20,7 +20,7 @@ from mpi4py import MPI
 
 import sys
 sys.path.insert(0, '../compression')
-from compress_gradient import g_compress
+from compression import g_compress
 
 LAYER_DIGITS= int(1e+3)
 TIMEOUT_THRESHOLD_=10

@@ -34,7 +34,7 @@ def w_compress(w):
     return send_msg
 
 def w_decompress(msg,shape):
-    trimmed_msg = trim_msg(msg)
+    trimmed_msg = _trim_msg(msg)
     unpacked_weight = blosc.decompress(trimmed_msg)
     weight = np.fromstring(unpacked_weight).reshape(shape)
     return weight
