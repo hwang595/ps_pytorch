@@ -253,20 +253,14 @@ class DistributedWorker(NN_Trainer):
     
     def async_fetch_weights_bcast(self):
         layers_to_update = []
+        weights_to_update = []
         for layer_idx, layer in enumerate(self.model_recv_buf.recv_buf):
             if self.model_recv_buf.layer_cur_step[layer_idx] < self.cur_step:
                 layers_to_update.append(layer_idx)
-                self.comm.Bcast([self.model_recv_buf.recv_buf[layer_idx], MPI.BYTE], root=0)
-                #self.comm.Ibcast([self.model_recv_buf.recv_buf[layer_idx], MPI.DOUBLE], root=0)
-                #req=self.comm.Ibcast([self.model_recv_buf.recv_buf[layer_idx], MPI.BYTE], root=0)
-                #req.Wait()
-        weights_to_update = []
-        for req_idx, layer_idx in enumerate(layers_to_update):
-            # decompress the received weights
-            weights = w_decompress(self.model_recv_buf.recv_buf[req_idx], self.model_recv_buf.layer_shape[req_idx])
-            weights_to_update.append(weights)
-            # we also need to update the layer cur step here:
-            self.model_recv_buf.layer_cur_step[req_idx] = self.cur_step
+                weights_recv=self.comm.bcast(self.model_recv_buf.recv_buf[layer_idx], root=0)
+                weights = w_decompress(weights_recv)
+                weights_to_update.append(weights)
+                self.model_recv_buf.layer_cur_step[layer_idx] = self.cur_step
         self.model_update(weights_to_update)
     
     def update_step(self):

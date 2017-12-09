@@ -27,14 +27,10 @@ def g_decompress(msg):
 
 def w_compress(w):
     assert isinstance(w, np.ndarray)
-    msg = w.tobytes()
-    packed_msg = blosc.compress(msg, cname='snappy')
-    # add redundency to avoid blosc decompress issue
-    send_msg = packed_msg + bytearray(b'\x29'*32)
-    return send_msg
+    packed_msg = blosc.pack_array(w, cname='snappy')
+    return packed_msg
 
-def w_decompress(msg,shape):
-    trimmed_msg = _trim_msg(msg)
-    unpacked_weight = blosc.decompress(trimmed_msg)
-    weight = np.fromstring(unpacked_weight).reshape(shape)
+def w_decompress(msg):
+    assert isinstance(msg, str)
+    weight = blosc.unpack_array(msg)
     return weight
