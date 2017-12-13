@@ -13,3 +13,10 @@ implement [parameter server](https://www.cs.cmu.edu/~muli/file/parameter_server_
 4. gradient compression is implemented using high-speed compression tool [Blosc](https://github.com/Blosc/c-blosc) to mitigate communication overhead
 
 ![alt text](https://github.com/hwang595/ps_pytorch/blob/master/images/system_overview.jpg)
+
+# future works:
+(Please note that this project is still in early alpha version)
+1. move APIs into PyTorch completely using its [built-in communication lib](http://pytorch.org/docs/master/distributed.html)
+2. optimize the speedups and minize communication overhead
+3. support async communication mode
+4. wrap up more state-of-art deep models and dataset
