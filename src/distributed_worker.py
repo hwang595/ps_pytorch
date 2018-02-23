@@ -270,7 +270,7 @@ class DistributedWorker(NN_Trainer):
                 grad = p.grad.cpu().numpy().astype(np.float64)
             else:
                 grad = p.grad.numpy().astype(np.float64)
-                
+
             # wait until grad of last layer shipped to PS
             if len(req_send_check) != 0:
                 req_send_check[-1].wait()
@@ -290,14 +290,23 @@ class DistributedWorker(NN_Trainer):
         correct = 0
         prec1_counter_ = prec5_counter_ = batch_counter_ = 0
         for data, y_batch in test_loader:
-            data, target = Variable(data, volatile=True), Variable(y_batch)
+            if self._enable_gpu:
+                data, target = Variable(data.cuda(), volatile=True), Variable(y_batch.cuda())
+            else:
+                data, target = Variable(data, volatile=True), Variable(y_batch)
+
             output = self.network(data)
             test_loss += F.nll_loss(output, target, size_average=False).data[0] # sum up batch loss
-            #pred = output.data.max(1, keepdim=True)[1] # get the index of the max log-probability
-            #correct += pred.eq(target.data.view_as(pred)).cpu().sum()
+
             prec1_tmp, prec5_tmp = accuracy(output.data, y_batch, topk=(1, 5))
-            prec1_counter_ += prec1_tmp.numpy()[0]
-            prec5_counter_ += prec5_tmp.numpy()[0]
+
+            if self._enable_gpu:
+                prec1_counter_ += prec1_tmp.cpu().numpy()[0]
+                prec5_counter_ += prec5_tmp.cpu().numpy()[0]
+            else:
+                prec1_counter_ += prec1_tmp.numpy()[0]
+                prec5_counter_ += prec5_tmp.numpy()[0]
+            
             batch_counter_ += 1
         prec1 = prec1_counter_ / batch_counter_
         prec5 = prec5_counter_ / batch_counter_
