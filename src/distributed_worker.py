@@ -94,6 +94,7 @@ class DistributedWorker(NN_Trainer):
         self._eval_freq = kwargs['eval_freq']
         self._train_dir = kwargs['train_dir']
         self._compress_grad = kwargs['compress_grad']
+        self._enable_gpu = kwargs['enable_gpu']
 
         # this one is going to be used to avoid fetch the weights for multiple times
         self._layer_cur_step = []
@@ -114,6 +115,9 @@ class DistributedWorker(NN_Trainer):
         self.init_recv_buf()
         #self._param_idx = len(self.network.full_modules)*2-1
         self._param_idx = self.network.fetch_init_channel_index-1
+
+        if self._enable_gpu:
+            self.network.cuda()
 
     def train(self, train_loader, test_loader):
         # the first step we need to do here is to sync fetch the inital worl_step from the parameter server
@@ -137,7 +141,10 @@ class DistributedWorker(NN_Trainer):
         # start the training process
         for num_epoch in range(self.max_epochs):
             for batch_idx, (train_image_batch, train_label_batch) in enumerate(train_loader):
-                X_batch, y_batch = Variable(train_image_batch), Variable(train_label_batch)
+                if self._enable_gpu:
+                    X_batch, y_batch = Variable(train_image_batch.cuda()), Variable(train_label_batch.cuda())
+                else:
+                    X_batch, y_batch = Variable(train_image_batch), Variable(train_label_batch)
                 while True:
                     # the worker shouldn't know the current global step
                     # except received the message from parameter server
@@ -173,36 +180,13 @@ class DistributedWorker(NN_Trainer):
                     # manage batch index manually
                     self.optimizer.zero_grad()
 
-                    # forward step
-                    forward_start_time = time.time()
+                    # forward
                     logits = self.network(X_batch)
-                    logits_1 = Variable(logits.data, requires_grad=True)
-
-                    loss = self.criterion(logits_1, y_batch)
-
-                    epoch_avg_loss += loss.data[0]
-                    forward_duration = time.time()-forward_start_time
-
-                    # backward step
-                    backward_start_time = time.time()
+                    loss = self.criterion(logits, y_batch)
+                    # backward
                     loss.backward()
-                    # we can send the grad of this very first layer to parameter server right here before
-                    # the chain rule is begining
-                    req_send_check = []
-                    init_grad_data = logits_1.grad.data.numpy()
-                    init_grad_data = np.sum(init_grad_data, axis=0).astype(np.float64)
-                    # send grad to parameter server
-                    if self._compress_grad=='compress':
-                        _compressed_grad = g_compress(init_grad_data)
-                        req_isend = self.comm.isend(_compressed_grad, dest=0, tag=88+self._param_idx)
-                    else:
-                        req_isend = self.comm.Isend([init_grad_data, MPI.DOUBLE], dest=0, tag=88+self._param_idx)
-                    req_send_check.append(req_isend)
-                    
-                    req_send_check=self.network.backward_normal(logits_1.grad, self.comm, req_send_check, self.cur_step, self._compress_grad)
-                    req_send_check[-1].wait()
 
-                    backward_duration = time.time()-backward_start_time
+                    self._send_grads()
 
                     # on the end of a certain iteration
                     print('Worker: {}, Cur Step: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, FetchWeight: {:.4f}, Forward: {:.4f}, Backward: {:.4f}'.format(self.rank,
@@ -214,12 +198,6 @@ class DistributedWorker(NN_Trainer):
                         self._evaluate_model(test_loader)
                     # break here to fetch data then enter fetching step loop again
                     break
-                '''
-                prec1, prec5 = accuracy(logits.data, train_label_batch.long(), topk=(1, 5))
-                print('Worker: {}, Cur Step: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, Prec@1: {}, Prec@5: {}'.format(self.rank,
-                     self.cur_step, epoch_idx, batch_idx * self.batch_size, self.batch_size*num_batch_per_epoch, 
-                        (100. * (batch_idx * self.batch_size) / (self.batch_size*num_batch_per_epoch)), loss.data[0], time.time()-iter_start_time, prec1.numpy()[0], prec5.numpy()[0]))
-                '''
 
     def init_recv_buf(self):
         self.model_recv_buf = ModelBuffer(self.network)
@@ -283,6 +261,28 @@ class DistributedWorker(NN_Trainer):
                 model_counter_ += 1
             new_state_dict.update(tmp_dict)
         self.network.load_state_dict(new_state_dict)
+
+    def _send_grads(self):
+        req_send_check = []
+        encode_time_counter_ = 0
+        for p_index, p in enumerate(self.network.parameters()):
+            if self._enable_gpu:
+                grad = p.grad.cpu().numpy().astype(np.float64)
+            else:
+                grad = p.grad.numpy().astype(np.float64)
+                
+            # wait until grad of last layer shipped to PS
+            if len(req_send_check) != 0:
+                req_send_check[-1].wait()
+            if self._compress:
+ 
+                _compressed_grad = g_compress(grad)
+                req_isend = communicator.isend(_compressed_grad, dest=0, tag=88+p_index)
+                req_send_check.append(req_isend)
+            else:
+                req_isend = self.comm.Isend([grad, MPI.DOUBLE], dest=0, tag=88+p_index)
+                req_send_check.append(req_isend)
+        req_send_check[-1].wait()
 
     def _evaluate_model(self, test_loader):
         self.network.eval()
