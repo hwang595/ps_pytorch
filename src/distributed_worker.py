@@ -104,7 +104,7 @@ class DistributedWorker(NN_Trainer):
         if self.network_config == "LeNet":
             self.network=LeNetSplit()
         elif self.network_config == "ResNet18":
-            self.network=ResNet18
+            self.network=ResNet18()
         elif self.network_config == "ResNet34":
             self.network=ResNet34()
 
@@ -113,8 +113,6 @@ class DistributedWorker(NN_Trainer):
         self.criterion = nn.CrossEntropyLoss()
         # assign a buffer for receiving models from parameter server
         self.init_recv_buf()
-        #self._param_idx = len(self.network.full_modules)*2-1
-        self._param_idx = self.network.fetch_init_channel_index-1
 
         if self._enable_gpu:
             self.network.cuda()
@@ -179,17 +177,22 @@ class DistributedWorker(NN_Trainer):
                     # manage batch index manually
                     self.optimizer.zero_grad()
                     # forward
+                    f_start = time.time()
                     logits = self.network(X_batch)
                     loss = self.criterion(logits, y_batch)
+                    f_dur = time.time() - f_start
+
                     # backward
+                    b_start = time.time()
                     loss.backward()
+                    b_dur = time.time() - b_start
 
                     self._send_grads()
 
                     # on the end of a certain iteration
                     print('Worker: {}, Cur Step: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, FetchWeight: {:.4f}, Forward: {:.4f}, Backward: {:.4f}'.format(self.rank,
                             self.cur_step, num_epoch, batch_idx * self.batch_size, len(train_loader.dataset), 
-                            (100. * (batch_idx * self.batch_size) / len(train_loader.dataset)), loss.data[0], time.time()-iter_start_time, fetch_weight_duration, forward_duration, backward_duration))
+                            (100. * (batch_idx * self.batch_size) / len(train_loader.dataset)), loss.data[0], time.time()-iter_start_time, fetch_weight_duration, f_dur, b_dur))
                     # save model for validation in a pre-specified frequency
                     if self.cur_step%self._eval_freq == 0:
                         #self._save_model(file_path=self._generate_model_path())
@@ -265,17 +268,16 @@ class DistributedWorker(NN_Trainer):
         encode_time_counter_ = 0
         for p_index, p in enumerate(self.network.parameters()):
             if self._enable_gpu:
-                grad = p.grad.cpu().numpy().astype(np.float64)
+                grad = p.grad.cpu().data.numpy().astype(np.float64)
             else:
                 grad = p.grad.numpy().astype(np.float64)
 
             # wait until grad of last layer shipped to PS
             if len(req_send_check) != 0:
                 req_send_check[-1].wait()
-            if self._compress:
- 
+            if self._compress_grad == "compress":
                 _compressed_grad = g_compress(grad)
-                req_isend = communicator.isend(_compressed_grad, dest=0, tag=88+p_index)
+                req_isend = self.comm.isend(_compressed_grad, dest=0, tag=88+p_index)
                 req_send_check.append(req_isend)
             else:
                 req_isend = self.comm.Isend([grad, MPI.DOUBLE], dest=0, tag=88+p_index)

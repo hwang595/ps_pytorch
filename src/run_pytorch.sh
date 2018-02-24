@@ -12,4 +12,5 @@ python distributed_nn.py \
 --kill-threshold=6.8 \
 --eval-freq=20 \
 --compress-grad=compress \
+--enable-gpu= \
 --train-dir=/home/ubuntu/MPI_shared/
