@@ -104,9 +104,9 @@ class DistributedWorker(NN_Trainer):
         if self.network_config == "LeNet":
             self.network=LeNetSplit()
         elif self.network_config == "ResNet18":
-            self.network=ResNetSplit18(self.kill_threshold)
+            self.network=ResNet18
         elif self.network_config == "ResNet34":
-            self.network=ResNetSplit34()
+            self.network=ResNet34()
 
         # set up optimizer
         self.optimizer = torch.optim.SGD(self.network.parameters(), lr=self.lr, momentum=self.momentum)
@@ -176,10 +176,8 @@ class DistributedWorker(NN_Trainer):
 
                     # switch to training mode
                     self.network.train()
-                    #self._epoch_counter = test_loader.dataset.epochs_completed
                     # manage batch index manually
                     self.optimizer.zero_grad()
-
                     # forward
                     logits = self.network(X_batch)
                     loss = self.criterion(logits, y_batch)
@@ -306,7 +304,7 @@ class DistributedWorker(NN_Trainer):
             else:
                 prec1_counter_ += prec1_tmp.numpy()[0]
                 prec5_counter_ += prec5_tmp.numpy()[0]
-            
+
             batch_counter_ += 1
         prec1 = prec1_counter_ / batch_counter_
         prec5 = prec5_counter_ / batch_counter_
