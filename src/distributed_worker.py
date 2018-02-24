@@ -187,12 +187,14 @@ class DistributedWorker(NN_Trainer):
                     loss.backward()
                     b_dur = time.time() - b_start
 
+                    comm_start = time.time()
                     self._send_grads()
+                    comm_dur = time.time() - comm_start
 
                     # on the end of a certain iteration
-                    print('Worker: {}, Cur Step: {}, Train Epoch: {} [{}/{} ({:.0f}%)], Train Loss: {:.4f}, Time Cost: {:.4f}, FetchWeight: {:.4f}, Forward: {:.4f}, Backward: {:.4f}'.format(self.rank,
+                    print('Worker: {}, Step: {}, Epoch: {} [{}/{} ({:.0f}%)], Loss: {:.4f}, Time Cost: {:.4f}, FetchWeight: {:.4f}, Forward: {:.4f}, Backward: {:.4f}, Comm Cost: {:.4f}'.format(self.rank,
                             self.cur_step, num_epoch, batch_idx * self.batch_size, len(train_loader.dataset), 
-                            (100. * (batch_idx * self.batch_size) / len(train_loader.dataset)), loss.data[0], time.time()-iter_start_time, fetch_weight_duration, f_dur, b_dur))
+                            (100. * (batch_idx * self.batch_size) / len(train_loader.dataset)), loss.data[0], time.time()-iter_start_time, fetch_weight_duration, f_dur, b_dur, comm_dur))
                     # save model for validation in a pre-specified frequency
                     if self.cur_step%self._eval_freq == 0:
                         #self._save_model(file_path=self._generate_model_path())
