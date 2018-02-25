@@ -260,7 +260,10 @@ class DistributedWorker(NN_Trainer):
                 tmp_dict={key_name: param}
             else:
                 assert param.size() == weights_to_update[model_counter_].shape
-                tmp_dict = {key_name: torch.from_numpy(weights_to_update[model_counter_])}
+                if self._enable_gpu:
+                    tmp_dict = {key_name: torch.from_numpy(weights_to_update[model_counter_]).cuda()}
+                else:
+                    tmp_dict = {key_name: torch.from_numpy(weights_to_update[model_counter_])}
                 model_counter_ += 1
             new_state_dict.update(tmp_dict)
         self.network.load_state_dict(new_state_dict)
