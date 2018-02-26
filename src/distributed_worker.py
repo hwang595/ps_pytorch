@@ -275,8 +275,7 @@ class DistributedWorker(NN_Trainer):
             if self._enable_gpu:
                 grad = p.grad.cpu().data.numpy().astype(np.float64)
             else:
-                grad = p.grad.numpy().astype(np.float64)
-
+                grad = p.grad.data.numpy().astype(np.float64)
             # wait until grad of last layer shipped to PS
             if len(req_send_check) != 0:
                 req_send_check[-1].wait()
