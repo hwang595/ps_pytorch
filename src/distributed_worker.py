@@ -107,6 +107,8 @@ class DistributedWorker(NN_Trainer):
             self.network=ResNet18()
         elif self.network_config == "ResNet34":
             self.network=ResNet34()
+        elif self.network_config == "ResNet50":
+            self.network=ResNet50()
 
         # set up optimizer
         self.optimizer = torch.optim.SGD(self.network.parameters(), lr=self.lr, momentum=self.momentum)
