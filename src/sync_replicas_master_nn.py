@@ -118,11 +118,11 @@ class SyncReplicasMaster_NN(NN_Trainer):
     def build_model(self):
         # build network
         if self.network_config == "LeNet":
-            self.network=LeNetSplit()
+            self.network=LeNet()
         elif self.network_config == "ResNet18":
-            self.network=ResNetSplit18(self._timeout_threshold)
+            self.network=ResNet18()
         elif self.network_config == "ResNet34":
-            self.network=ResNetSplit34()
+            self.network=ResNet34()
         elif self.network_config == "ResNet50":
             self.network=ResNet50()
           
