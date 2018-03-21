@@ -2,6 +2,7 @@ from __future__ import print_function
 import time
 import copy
 from sys import getsizeof
+import logging
 
 from mpi4py import MPI
 import numpy as np
@@ -16,7 +17,8 @@ from compression import g_decompress, w_compress
 import torch
 
 STEP_START_ = 1
-
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 def update_params_dist_version(param, avg_grad, learning_rate):
     '''
@@ -46,6 +48,7 @@ def accuracy(output, target, topk=(1,)):
 class GradientAccumulator(object):
     '''a simple class to implement gradient aggregator like the `Conditional Accumulators` in tensorflow'''
     def __init__(self, module, num_worker, mode='None'):
+        super(GradientAccumulator, self).__init__()
         # we will update this counter dynamically during the training process
         # the length of this counter should be number of fc layers in the network
         # we used list to contain gradients of layers
@@ -91,6 +94,7 @@ class GradientAccumulator(object):
 
 class SyncReplicasMaster_NN(NN_Trainer):
     def __init__(self, comm, **kwargs):
+        super(SyncReplicasMaster_NN, self).__init__()
         '''master node here, no rank needed since the rank will always be 0 for master node'''
         self.comm = comm   # get MPI communicator object
         self.world_size = comm.Get_size() # total number of processes
@@ -120,7 +124,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
         if self.network_config == "LeNet":
             self.network=LeNet()
         elif self.network_config == "ResNet18":
-            self.network=ResNet18()
+            self.network=ResNetSplit18(self._timeout_threshold)
         elif self.network_config == "ResNet34":
             self.network=ResNet34()
         elif self.network_config == "ResNet50":
@@ -145,7 +149,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
             self._first_grad_received = False
             enough_gradients_received = False
 
-            print("Master node is entering step: {}".format(i))
+            logger.info("Master node is entering step: {}".format(i))
 
             self.async_bcast_step()
 
@@ -182,7 +186,6 @@ class SyncReplicasMaster_NN(NN_Trainer):
                     ############################ only for temp test ###################################
                     if self.grad_accumulator.gradient_aggregate_counter[layer_index] <= self._expected_grad_to_recv:
                         self.aggregate_gradient(gradient=received_grad, layer_idx=layer_index)
-                    #self.aggregate_gradient(gradient=received_grad, layer_idx=layer_index)
 
                     self.grad_accumulator.gradient_aggregate_counter[layer_index] += 1
                     
@@ -194,7 +197,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
                     enough_gradients_received = enough_gradients_received and (j >= self._num_grad_to_collect)
 
             grad_gather_duration = time.time()-grad_gather_start_time
-            print("Master: gradient gather time: {:.4f}".format(grad_gather_duration))
+            logger.debug("Master: gradient gather time: {:.4f}".format(grad_gather_duration))
             # average gradients and update the mode
             for i in range(len(self._grad_aggregate_buffer)):
                 #self._grad_aggregate_buffer[i] /= self._num_grad_to_collect
@@ -207,7 +210,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
                 tmp_module.append(updated_model)
 
             # update `state_dict` in pytorch modules
-            print("Master start to update the model")
+            logger.debug("Master start to update the model")
             self.model_update(tmp_module)
 
             # reset essential elements
@@ -313,4 +316,4 @@ class SyncReplicasMaster_NN(NN_Trainer):
         prec1 = prec1_counter_ / batch_counter_
         prec5 = prec5_counter_ / batch_counter_
         self._epoch_counter = validation_loader.dataset.epochs_completed
-        print('Testset Performance: Cur Step:{} Prec@1: {} Prec@5: {}'.format(self.cur_step, prec1.numpy()[0], prec5.numpy()[0]))
+        logger.info('Testset Performance: Cur Step:{} Prec@1: {} Prec@5: {}'.format(self.cur_step, prec1.numpy()[0], prec5.numpy()[0]))

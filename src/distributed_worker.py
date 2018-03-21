@@ -15,11 +15,13 @@ from torch.autograd import Variable
 import time
 from datetime import datetime
 import copy
+import logging
 from sys import getsizeof
 
 STEP_START_ = 1
-
 TAG_LIST_ = [i*30 for i in range(50000)]
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 def prepare_grad_list(params):
     grad_list = []
@@ -27,7 +29,6 @@ def prepare_grad_list(params):
         # get gradient from layers here
         # in this version we fetch weights at once
         # remember to change type here, which is essential
-        #grads = param.grad.data.numpy().astype(np.float64)
         grads = param.grad.data.numpy().astype(np.float64)
         grad_list.append((param_idx, grads))
     return grad_list
@@ -54,6 +55,7 @@ class ModelBuffer(object):
         current step for each layer of model will also be updated here to make sure
         the model is always up-to-date
         """
+        super(ModelBuffer, self).__init__()
         self.recv_buf = []
         self.layer_cur_step = []
         self.layer_shape = []
@@ -76,6 +78,7 @@ class ModelBuffer(object):
 
 class DistributedWorker(NN_Trainer):
     def __init__(self, comm, **kwargs):
+        super(DistributedWorker, self).__init__()
         self.comm = comm   # get MPI communicator object
         self.world_size = comm.Get_size() # total number of processes
         self.rank = comm.Get_rank() # rank of this Worker
@@ -136,8 +139,7 @@ class DistributedWorker(NN_Trainer):
         iter_start_time=0
         first = True
 
-        print("Worker {}: starting training".format(self.rank))
-        # start the training process
+        logger.info("Worker {}: starting training".format(self.rank))
         # start the training process
         for num_epoch in range(self.max_epochs):
             for batch_idx, (train_image_batch, train_label_batch) in enumerate(train_loader):
@@ -161,7 +163,7 @@ class DistributedWorker(NN_Trainer):
                     iteration_last_step = time.time() - iter_start_time
                     iter_start_time = time.time()
                     first = False
-                    print("Rank of this node: {}, Current step: {}".format(self.rank, self.cur_step))
+                    logger.info("Rank of this node: {}, Current step: {}".format(self.rank, self.cur_step))
 
                     # TODO(hwang): return layer request here and do weight before the forward step begins, rather than implement
                     # the wait() in the fetch function
@@ -194,7 +196,7 @@ class DistributedWorker(NN_Trainer):
                     comm_dur = time.time() - comm_start
 
                     # on the end of a certain iteration
-                    print('Worker: {}, Step: {}, Epoch: {} [{}/{} ({:.0f}%)], Loss: {:.4f}, Time Cost: {:.4f}, FetchWeight: {:.4f}, Forward: {:.4f}, Backward: {:.4f}, Comm Cost: {:.4f}'.format(self.rank,
+                    logger.info('Worker: {}, Step: {}, Epoch: {} [{}/{} ({:.0f}%)], Loss: {:.4f}, Time Cost: {:.4f}, FetchWeight: {:.4f}, Forward: {:.4f}, Backward: {:.4f}, Comm Cost: {:.4f}'.format(self.rank,
                             self.cur_step, num_epoch, batch_idx * self.batch_size, len(train_loader.dataset), 
                             (100. * (batch_idx * self.batch_size) / len(train_loader.dataset)), loss.data[0], time.time()-iter_start_time, fetch_weight_duration, f_dur, b_dur, comm_dur))
                     # save model for validation in a pre-specified frequency
@@ -317,7 +319,7 @@ class DistributedWorker(NN_Trainer):
         prec1 = prec1_counter_ / batch_counter_
         prec5 = prec5_counter_ / batch_counter_
         test_loss /= len(test_loader.dataset)
-        print('Test set: Average loss: {:.4f}, Prec@1: {} Prec@5: {}'.format(test_loss, prec1, prec5))
+        logger.info('Test set: Average loss: {:.4f}, Prec@1: {} Prec@5: {}'.format(test_loss, prec1, prec5))
 
     def _generate_model_path(self):
         return self._train_dir+"model_step_"+str(self.cur_step)
