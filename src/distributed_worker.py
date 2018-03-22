@@ -3,11 +3,8 @@ from mpi4py import MPI
 import numpy as np
 
 from nn_ops import NN_Trainer
-
-from model_ops.lenet import LeNet, LeNetSplit
-from model_ops.resnet import *
-from model_ops.resnet_split import *
 from compression import g_compress, w_decompress
+from util import build_model
 
 import torch
 from torch.autograd import Variable
@@ -20,8 +17,7 @@ from sys import getsizeof
 
 STEP_START_ = 1
 TAG_LIST_ = [i*30 for i in range(50000)]
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger = logging.basicConfig(level=logging.INFO)
 
 def prepare_grad_list(params):
     grad_list = []
@@ -41,7 +37,6 @@ def accuracy(output, target, topk=(1,)):
     _, pred = output.topk(maxk, 1, True, True)
     pred = pred.t()
     correct = pred.eq(target.view(1, -1).expand_as(pred))
-
     res = []
     for k in topk:
         correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
@@ -78,7 +73,7 @@ class ModelBuffer(object):
 
 class DistributedWorker(NN_Trainer):
     def __init__(self, comm, **kwargs):
-        super(DistributedWorker, self).__init__()
+        super(NN_Trainer, self).__init__()
         self.comm = comm   # get MPI communicator object
         self.world_size = comm.Get_size() # total number of processes
         self.rank = comm.Get_rank() # rank of this Worker
@@ -103,16 +98,7 @@ class DistributedWorker(NN_Trainer):
         self._layer_cur_step = []
 
     def build_model(self):
-        # build network
-        if self.network_config == "LeNet":
-            self.network=LeNet()
-        elif self.network_config == "ResNet18":
-            self.network=ResNet18()
-        elif self.network_config == "ResNet34":
-            self.network=ResNet34()
-        elif self.network_config == "ResNet50":
-            self.network=ResNet50()
-
+        self.network = build_model(self.network_config)
         # set up optimizer
         self.optimizer = torch.optim.SGD(self.network.parameters(), lr=self.lr, momentum=self.momentum)
         self.criterion = nn.CrossEntropyLoss()

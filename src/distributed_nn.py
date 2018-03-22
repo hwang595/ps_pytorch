@@ -22,8 +22,6 @@ from data_loader_ops.my_data_loader import DataLoader
 from distributed_worker import *
 from sync_replicas_master_nn import *
 
-#for tmp solution
-from datasets import MNISTDataset, Cifar10Dataset
 
 def add_fit_args(parser):
     """

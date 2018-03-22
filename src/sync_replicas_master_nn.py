@@ -8,17 +8,12 @@ from mpi4py import MPI
 import numpy as np
 
 from nn_ops import NN_Trainer
-
-from model_ops.lenet import LeNet, LeNetSplit
-from model_ops.resnet import *
-from model_ops.resnet_split import *
 from compression import g_decompress, w_compress
 
 import torch
 
 STEP_START_ = 1
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger = logging.basicConfig(level=logging.INFO)
 
 def update_params_dist_version(param, avg_grad, learning_rate):
     '''
@@ -94,7 +89,7 @@ class GradientAccumulator(object):
 
 class SyncReplicasMaster_NN(NN_Trainer):
     def __init__(self, comm, **kwargs):
-        super(SyncReplicasMaster_NN, self).__init__()
+        super(NN_Trainer, self).__init__()
         '''master node here, no rank needed since the rank will always be 0 for master node'''
         self.comm = comm   # get MPI communicator object
         self.world_size = comm.Get_size() # total number of processes
@@ -120,16 +115,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
         self._eval_batch_size = 1000
 
     def build_model(self):
-        # build network
-        if self.network_config == "LeNet":
-            self.network=LeNet()
-        elif self.network_config == "ResNet18":
-            self.network=ResNetSplit18(self._timeout_threshold)
-        elif self.network_config == "ResNet34":
-            self.network=ResNet34()
-        elif self.network_config == "ResNet50":
-            self.network=ResNet50()
-          
+        self.network = build_model(self.network_config)
         # TODO(hwang): make sure this is useful
         self.optimizer = torch.optim.SGD(self.network.parameters(), lr=self.lr, momentum=self.momentum)
         # assign a gradient accumulator to collect gradients from workers
