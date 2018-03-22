@@ -164,7 +164,7 @@ class DistributedWorker(NN_Trainer):
                     self._train_init()
 
                     f_start = time.time()
-                    loss = self._forward(X_batch)
+                    loss = self._forward(X_batch, y_batch)
                     f_dur = time.time() - f_start
 
                     # backward
@@ -193,7 +193,7 @@ class DistributedWorker(NN_Trainer):
         self.network.train()
         self.optimizer.zero_grad()
 
-    def _forward(self, X_batch):
+    def _forward(self, X_batch, y_batch):
         logits = self.network(X_batch)
         return self.criterion(logits, y_batch)
 
@@ -206,6 +206,7 @@ class DistributedWorker(NN_Trainer):
         self.next_step = req.wait()
 
     def async_fetch_weights_async(self):
+        # deprecated
         request_layers = []
         layers_to_update = []
         for layer_idx, layer in enumerate(self.model_recv_buf.recv_buf):

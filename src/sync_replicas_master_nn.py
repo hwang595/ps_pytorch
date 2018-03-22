@@ -213,6 +213,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
             req_list[i].wait()
 
     def async_bcast_layer_weights_async(self):
+        # deprecated
         request_layers = []
         for layer_idx, layer in enumerate(self.network.parameters()):
             request_workers = []
