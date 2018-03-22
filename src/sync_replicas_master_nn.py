@@ -122,7 +122,6 @@ class SyncReplicasMaster_NN(NN_Trainer):
 
     def build_model(self):
         self.network = build_model(self.network_config)
-        # TODO(hwang): make sure this is useful
         self.optimizer = SGD(self.network.parameters(), lr=self.lr, momentum=self.momentum)
         # assign a gradient accumulator to collect gradients from workers
         self.grad_accumulator = GradientAccumulator(self.network, self.world_size-1, self._compress_grad)
@@ -180,20 +179,16 @@ class SyncReplicasMaster_NN(NN_Trainer):
                         self.aggregate_gradient(gradient=received_grad, layer_idx=layer_index)
 
                     self.grad_accumulator.gradient_aggregate_counter[layer_index] += 1
-                    
                     #print(self.grad_accumulator.gradient_aggregate_counter)
                     #print('---------------------------------------------------------------------')
                 
                 enough_gradients_received = True
                 for j in self.grad_accumulator.gradient_aggregate_counter:
                     enough_gradients_received = enough_gradients_received and (j >= self._num_grad_to_collect)
-
             grad_gather_duration = time.time()-grad_gather_start_time
             logger.debug("Master: gradient gather time: {:.4f}".format(grad_gather_duration))
-            # average gradients and update the mode
-            self._grad_aggregate_buffer = map(lambda x: x / float(self._expected_grad_to_recv), self._grad_aggregate_buffer)
-            self.optimizer.step(grads=self._grad_aggregate_buffer)
 
+            self._model_update()
             # reset essential elements
             self.meset_grad_buffer()
             self.grad_accumulator.meset_everything()
@@ -203,6 +198,11 @@ class SyncReplicasMaster_NN(NN_Trainer):
         for param_idx, param in enumerate(self.network.parameters()):
             self._model_shapes.append(param.size())
             self._grad_aggregate_buffer.append(np.zeros(param.size()))
+
+    def _model_update(self):
+        # gradient shipped from workers are averaged and update the model
+        self._grad_aggregate_buffer = map(lambda x: x / float(self._expected_grad_to_recv), self._grad_aggregate_buffer)
+        self.optimizer.step(grads=self._grad_aggregate_buffer)        
 
     def async_bcast_step(self):
         req_list = []

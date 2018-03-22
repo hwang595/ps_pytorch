@@ -154,25 +154,17 @@ class DistributedWorker(NN_Trainer):
                     first = False
                     logger.info("Rank of this node: {}, Current step: {}".format(self.rank, self.cur_step))
 
-                    # TODO(hwang): return layer request here and do weight before the forward step begins, rather than implement
-                    # the wait() in the fetch function
                     fetch_weight_start_time = time.time()
                     if self.comm_type == "Bcast":
                         self.async_fetch_weights_bcast()
                     elif self.comm_type == "Async":
                         self.async_fetch_weights_async()
-
                     fetch_weight_duration = time.time() - fetch_weight_start_time
-                    time_point_log = datetime.now()
 
-                    # switch to training mode
-                    self.network.train()
-                    # manage batch index manually
-                    self.optimizer.zero_grad()
-                    # forward
+                    self._train_init()
+
                     f_start = time.time()
-                    logits = self.network(X_batch)
-                    loss = self.criterion(logits, y_batch)
+                    loss = self._forward(X_batch)
                     f_dur = time.time() - f_start
 
                     # backward
@@ -190,13 +182,20 @@ class DistributedWorker(NN_Trainer):
                             (100. * (batch_idx * self.batch_size) / len(train_loader.dataset)), loss.data[0], time.time()-iter_start_time, fetch_weight_duration, f_dur, b_dur, comm_dur))
                     # save model for validation in a pre-specified frequency
                     if self.cur_step%self._eval_freq == 0:
-                        #self._save_model(file_path=self._generate_model_path())
                         self._evaluate_model(test_loader)
                     # break here to fetch data then enter fetching step loop again
                     break
 
     def init_recv_buf(self):
         self.model_recv_buf = ModelBuffer(self.network)
+
+    def _train_init(self):
+        self.network.train()
+        self.optimizer.zero_grad()
+
+    def _forward(self, X_batch):
+        logits = self.network(X_batch)
+        return self.criterion(logits, y_batch)
 
     def sync_fetch_step(self):
         '''fetch the first step from the parameter server'''
