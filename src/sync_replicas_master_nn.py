@@ -9,11 +9,17 @@ import numpy as np
 
 from nn_ops import NN_Trainer
 from compression import g_decompress, w_compress
+from util import *
+from optim.adam import Adam
+from optim.sgd import SGD
 
 import torch
 
 STEP_START_ = 1
-logger = logging.basicConfig(level=logging.INFO)
+
+logging.basicConfig()
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 def update_params_dist_version(param, avg_grad, learning_rate):
     '''
@@ -117,7 +123,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
     def build_model(self):
         self.network = build_model(self.network_config)
         # TODO(hwang): make sure this is useful
-        self.optimizer = torch.optim.SGD(self.network.parameters(), lr=self.lr, momentum=self.momentum)
+        self.optimizer = SGD(self.network.parameters(), lr=self.lr, momentum=self.momentum)
         # assign a gradient accumulator to collect gradients from workers
         self.grad_accumulator = GradientAccumulator(self.network, self.world_size-1, self._compress_grad)
         self.init_model_shapes()
@@ -185,19 +191,8 @@ class SyncReplicasMaster_NN(NN_Trainer):
             grad_gather_duration = time.time()-grad_gather_start_time
             logger.debug("Master: gradient gather time: {:.4f}".format(grad_gather_duration))
             # average gradients and update the mode
-            for i in range(len(self._grad_aggregate_buffer)):
-                #self._grad_aggregate_buffer[i] /= self._num_grad_to_collect
-                self._grad_aggregate_buffer[i] /= self._expected_grad_to_recv
-
-            # update using SGD method
-            tmp_module = []
-            for param_idx, param in enumerate(self.network.parameters()):
-                updated_model=update_params_dist_version(param=param.data.numpy(), avg_grad=self._grad_aggregate_buffer[param_idx], learning_rate=self.lr)
-                tmp_module.append(updated_model)
-
-            # update `state_dict` in pytorch modules
-            logger.debug("Master start to update the model")
-            self.model_update(tmp_module)
+            self._grad_aggregate_buffer = map(lambda x: x / float(self._expected_grad_to_recv), self._grad_aggregate_buffer)
+            self.optimizer.step(grads=self._grad_aggregate_buffer)
 
             # reset essential elements
             self.meset_grad_buffer()

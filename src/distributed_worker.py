@@ -4,7 +4,7 @@ import numpy as np
 
 from nn_ops import NN_Trainer
 from compression import g_compress, w_decompress
-from util import build_model
+from util import *
 
 import torch
 from torch.autograd import Variable
@@ -17,7 +17,10 @@ from sys import getsizeof
 
 STEP_START_ = 1
 TAG_LIST_ = [i*30 for i in range(50000)]
-logger = logging.basicConfig(level=logging.INFO)
+
+logging.basicConfig()
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 def prepare_grad_list(params):
     grad_list = []
