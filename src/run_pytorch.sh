@@ -10,7 +10,6 @@ python distributed_nn.py \
 --comm-type=Bcast \
 --num-aggregate=5 \
 --mode=normal \
---kill-threshold=6.8 \
 --eval-freq=20 \
 --compress-grad=compress \
 --enable-gpu= \

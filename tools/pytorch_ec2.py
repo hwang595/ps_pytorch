@@ -24,19 +24,19 @@ cfg = Cfg({
     "key_name": "HongyiScript",          # Necessary to ssh into created instances
     # Cluster topology
     "n_masters" : 1,                      # Should always be 1
-    "n_workers" : 3,
+    "n_workers" : 8,
     "num_replicas_to_aggregate" : "8",
     "method" : "spot",
     # Region speficiation
     "region" : "us-west-2",
     "availability_zone" : "us-west-2b",
     # Machine type - instance type configuration.
-    "master_type" : "m5.2xlarge",
-    "worker_type" : "m5.2xlarge",
+    "master_type" : "m4.2xlarge",
+    "worker_type" : "m4.2xlarge",
     # please only use this AMI for pytorch
-    "image_id": "ami-067aa07e",
+    "image_id": "ami-f60aba8e",
     # Launch specifications
-    "spot_price" : "0.16",                 # Has to be a string
+    "spot_price" : "0.15",                 # Has to be a string
     # SSH configuration
     "ssh_username" : "ubuntu",            # For sshing. E.G: ssh ssh_username@hostname
     "path_to_keyfile" : "/home/hwang/My_Code/AWS/HongyiScript.pem",
