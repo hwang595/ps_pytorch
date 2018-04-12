@@ -2,9 +2,9 @@
 implement [parameter server](https://www.cs.cmu.edu/~muli/file/parameter_server_osdi14.pdf) with PyTorch and OpenMPI
 ## Contents
 
-1. [Motivations] (#motivations)
-2. [System Design] (#system-design)
-3. [Basic Usages] (#basic-usages)
+1. [Motivations] (##Motivations)
+2. [System Design] (##system-design)
+3. [Basic Usages] (##basic-usages)
 
 ## Motivations:
 1. PyTorch provides easy-to-use APIs with dynamic computational graph
