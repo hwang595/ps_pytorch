@@ -36,7 +36,7 @@ python single_machine.py --dataset=MNIST/Cifar10 --network=LeNet/Resnet --batch-
 ### Cluster Setup:
 #### Launching Instances:
 The first thing you need do is to launch AWS EC2 instances. [This script](https://github.com/hwang595/ps_pytorch/tree/master/tools) helps you to launch EC2 instances automatically, but before running this script, you should follow [the instruction](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html) to setup AWS CLI on your local machine.
-After that, please edit this part in `pytorch_ec2.py`
+After that, please edit this part in `./tools/pytorch_ec2.py`
 ``` python
 cfg = Cfg({
     "name" : "PS_PYTORCH",      # Unique name for this specific configuration
@@ -44,7 +44,7 @@ cfg = Cfg({
     # Cluster topology
     "n_masters" : 1,                      # Should always be 1
     "n_workers" : 8,
-    "num_replicas_to_aggregate" : "8",
+    "num_replicas_to_aggregate" : "8", # deprecated, not necessary
     "method" : "spot",
     # Region speficiation
     "region" : "us-west-2",
@@ -53,7 +53,7 @@ cfg = Cfg({
     "master_type" : "m4.2xlarge",
     "worker_type" : "m4.2xlarge",
     # please only use this AMI for pytorch
-    "image_id": "ami-xxxxxxxx",
+    "image_id": "ami-xxxxxxxx",            # id of AMI
     # Launch specifications
     "spot_price" : "0.15",                 # Has to be a string
     # SSH configuration
