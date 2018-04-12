@@ -98,6 +98,7 @@ bash ./src/data_prepare.sh
 
 ## Job Launching
 Since this project is built on MPI, tasks are required to be launched from PS (or master). `run_pytorch.sh` wraps job-launching up. Commonly used options (arguments) are listed as following:
+
 | Argument                      | Comments                                 |
 | ----------------------------- | ---------------------------------------- |
 | `n`                     | Number of processes (size of cluster) e.g. if we have P compute node and 1 PS, n=P+1. |
