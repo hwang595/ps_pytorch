@@ -6,6 +6,7 @@ implement [parameter server](https://www.cs.cmu.edu/~muli/file/parameter_server_
 2. [System design](#system-design)
 3. [Basic usages](#basic-usages)
 4. [How to prepare datasets](#prepare-datasets)
+5. [How to launch a distributed task](#job-launching)
 
 ## Motivations:
 1. PyTorch provides easy-to-use APIs with dynamic computational graph
@@ -84,13 +85,33 @@ Running the following command will copy your keyfile to the parameter server (PS
 bash ./tool/local_script.sh ${PS_IP}
 ```
 #### SSH related:
-In PS setting, PS should be able to ssh to any compute node, [this part](https://github.com/hwang595/ps_pytorch/blob/master/tools/remote_script.sh#L8-L22) dose the job for you.
+In PS setting, PS should be able to ssh to any compute node, [this part](https://github.com/hwang595/ps_pytorch/blob/master/tools/remote_script.sh#L8-L22) dose the job for you by running (after ssh to the PS)
+```
+bash ./tools/remote_script.sh
+```
 
 ## Prepare Datasets
 We currently support [MNIST](http://yann.lecun.com/exdb/mnist/) and [Cifar10](https://www.cs.toronto.edu/~kriz/cifar.html) datasets. Download, split, and transform datasets by
 ```
 bash ./src/data_prepare.sh
 ```
+
+## Job Launching
+Since this project is built on MPI, tasks are required to be launched from PS (or master). `run_pytorch.sh` wraps job-launching up. Commonly used options (arguments) are listed as following:
+| Argument                      | Comments                                 |
+| ----------------------------- | ---------------------------------------- |
+| `n`                     | Number of processes (size of cluster) e.g. if we have P compute node and 1 PS, n=P+1. |
+| `hostfile`      | A directory to the file that contains Private IPs of every node in the cluster, we use `hosts_address` here as [mentioned before](#launching-instances). |
+| `lr`                        | Inital learning rate that will be use. |
+| `momentum`                  | Value of momentum that will be use. |
+| `max-steps`                       | The maximum number of iterations to train. |
+| `epochs`                  | The maximal number of epochs to train (somehow redundant).   |
+| `network`                  | Types of deep neural nets, currently `LeNet`, `ResNet-18/32/50/110/152`, and `VGGs` are supported. |
+| `dataset` | Datasets use for training. |
+| `batch-size` | Batch size for optimization algorithms. |
+| `eval-freq` | Frequency of iterations to evaluation the model. |
+| `enable-gpu`|Training on CPU/GPU, if CPU please leave this argument empty. |
+|`train-dir`|Directory to save model checkpoints for evaluation. |
 
 ## future works:
 (Please note that this project is still in early alpha version)
