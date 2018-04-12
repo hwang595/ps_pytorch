@@ -2,8 +2,8 @@
 implement [parameter server](https://www.cs.cmu.edu/~muli/file/parameter_server_osdi14.pdf) with PyTorch and OpenMPI
 ## Contents
 
-1. [Motivations] (##Motivations)
-2. [System Design] (##system-design)
+1. [Motivations] (https://github.com/hwang595/ps_pytorch#motivations)
+2. [System Design] (https://github.com/hwang595/ps_pytorch#system-design)
 3. [Basic Usages] (##basic-usages)
 
 ## Motivations:
