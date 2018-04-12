@@ -3,8 +3,9 @@ implement [parameter server](https://www.cs.cmu.edu/~muli/file/parameter_server_
 ## Contents
 
 1. [Motivations](#motivations)
-2. [System Design](#system-design)
-3. [Basic Usages](#basic-usages)
+2. [System design](#system-design)
+3. [Basic usages](#basic-usages)
+4. [How to prepare datasets](#prepare-datasets)
 
 ## Motivations:
 1. PyTorch provides easy-to-use APIs with dynamic computational graph
@@ -25,7 +26,8 @@ implement [parameter server](https://www.cs.cmu.edu/~muli/file/parameter_server_
 python single_machine.py --dataset=MNIST/Cifar10 --network=LeNet/Resnet --batch-size=${BATCH_SIZE}
 ```
 ### Cluster Setup:
-The first thing you need do is to launch AWS EC2 instances. [This script](https://github.com/hwang595/ps_pytorch/tree/master/tools) helps you to launch EC2 instances automatically, but before running this script, you should follow [the instruction](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html) to setup AWS CLI.
+#### Launching Instances:
+The first thing you need do is to launch AWS EC2 instances. [This script](https://github.com/hwang595/ps_pytorch/tree/master/tools) helps you to launch EC2 instances automatically, but before running this script, you should follow [the instruction](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html) to setup AWS CLI on your local machine.
 After that, please edit this part in `pytorch_ec2.py`
 ``` python
 cfg = Cfg({
@@ -60,6 +62,34 @@ cfg = Cfg({
 Then, launch EC2 instances by running
 ```
 python ./tools/pytorch_ec2.py launch
+```
+After all launched instances are ready (this may take a while), getting private ips of instances by
+```
+python ./tools/pytorch_ec2.py get_hosts
+```
+this will write ips into a file named `hosts_address`, which looks like
+```
+172.31.16.226 (${PS_IP})
+172.31.27.245
+172.31.29.131
+172.31.18.108
+172.31.18.174
+172.31.17.228
+172.31.16.25
+172.31.30.61
+172.31.29.30
+```
+Running the following command will copy your keyfile to the parameter server (PS) and do some basic configurations
+```
+bash ./tool/local_script.sh ${PS_IP}
+```
+#### SSH related:
+In PS setting, PS should be able to ssh to any compute node, [this part](https://github.com/hwang595/ps_pytorch/blob/master/tools/remote_script.sh#L8-L22) dose the job for you.
+
+## Prepare Datasets
+We currently support [MNIST](http://yann.lecun.com/exdb/mnist/) and [Cifar10](https://www.cs.toronto.edu/~kriz/cifar.html) datasets. Download, split, and transform datasets by
+```
+bash ./src/data_prepare.sh
 ```
 
 ## future works:
