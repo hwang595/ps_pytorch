@@ -20,7 +20,47 @@ implement [parameter server](https://www.cs.cmu.edu/~muli/file/parameter_server_
 ![alt text](https://github.com/hwang595/ps_pytorch/blob/master/images/system_overview.jpg)
 
 ## Basic Usages
+### Single Machine:
+```
+python single_machine.py --dataset=MNIST/Cifar10 --network=LeNet/Resnet --batch-size=${BATCH_SIZE}
+```
+### Cluster Setup:
+The first thing you need do is to launch AWS EC2 instances. [This script](https://github.com/hwang595/ps_pytorch/tree/master/tools) helps you to launch EC2 instances automatically, but before running this script, you should follow [the instruction](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html) to setup AWS CLI.
+After that, please edit this part in `pytorch_ec2.py`
+``` python
+cfg = Cfg({
+    "name" : "PS_PYTORCH",      # Unique name for this specific configuration
+    "key_name": "NameOfKeyFile",          # Necessary to ssh into created instances
+    # Cluster topology
+    "n_masters" : 1,                      # Should always be 1
+    "n_workers" : 8,
+    "num_replicas_to_aggregate" : "8",
+    "method" : "spot",
+    # Region speficiation
+    "region" : "us-west-2",
+    "availability_zone" : "us-west-2b",
+    # Machine type - instance type configuration.
+    "master_type" : "m4.2xlarge",
+    "worker_type" : "m4.2xlarge",
+    # please only use this AMI for pytorch
+    "image_id": "ami-xxxxxxxx",
+    # Launch specifications
+    "spot_price" : "0.15",                 # Has to be a string
+    # SSH configuration
+    "ssh_username" : "ubuntu",            # For sshing. E.G: ssh ssh_username@hostname
+    "path_to_keyfile" : "/dir/to/NameOfKeyFile.pem",
 
+    # NFS configuration
+    # To set up these values, go to Services > ElasticFileSystem > Create new filesystem, and follow the directions.
+    #"nfs_ip_address" : "172.31.3.173",         # us-west-2c
+    #"nfs_ip_address" : "172.31.35.0",          # us-west-2a
+    "nfs_ip_address" : "172.31.14.225",          # us-west-2b
+    "nfs_mount_point" : "/home/ubuntu/shared",       # NFS base dir
+```
+Then, launch EC2 instances by running
+```
+python ./tools/pytorch_ec2.py launch
+```
 
 ## future works:
 (Please note that this project is still in early alpha version)
