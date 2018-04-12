@@ -7,6 +7,7 @@ implement [parameter server](https://www.cs.cmu.edu/~muli/file/parameter_server_
 3. [Basic usages](#basic-usages)
 4. [How to prepare datasets](#prepare-datasets)
 5. [How to launch a distributed task](#job-launching)
+6. [Future works](#future-works)
 
 ## Motivations:
 1. PyTorch provides easy-to-use APIs with dynamic computational graph
@@ -22,6 +23,12 @@ implement [parameter server](https://www.cs.cmu.edu/~muli/file/parameter_server_
 ![alt text](https://github.com/hwang595/ps_pytorch/blob/master/images/system_overview.jpg)
 
 ## Basic Usages
+### Dependencies:
+Anaconda is highly recommended for installing depdencies for this project. Assume a conda setup machine is used, you can run 
+```
+bash ./tools/pre_run.sh
+```
+to install all depdencies needed.
 ### Single Machine:
 ```
 python single_machine.py --dataset=MNIST/Cifar10 --network=LeNet/Resnet --batch-size=${BATCH_SIZE}
@@ -114,7 +121,7 @@ Since this project is built on MPI, tasks are required to be launched from PS (o
 | `enable-gpu`|Training on CPU/GPU, if CPU please leave this argument empty. |
 |`train-dir`|Directory to save model checkpoints for evaluation. |
 
-## future works:
+## Future works:
 (Please note that this project is still in early alpha version)
 1. move APIs into PyTorch completely using its [built-in communication lib](http://pytorch.org/docs/master/distributed.html)
 2. optimize the speedups and minize communication overhead
