@@ -6,7 +6,6 @@ import time
 
 import torch
 from torch.autograd import Variable
-from torch._utils import _flatten_tensors, _unflatten_tensors
 from torch.cuda.comm import broadcast_coalesced
 from torch.cuda import nccl
 
@@ -188,13 +187,13 @@ if __name__ == "__main__":
 
     # load training and test set here:
     if args.dataset == "MNIST":
-        training_set = datasets.MNIST('../data', train=True, download=True,
+        training_set = datasets.MNIST('./mnist_data', train=True, download=True,
                    transform=transforms.Compose([
                        transforms.ToTensor(),
                        transforms.Normalize((0.1307,), (0.3081,))]))
         train_loader = DataLoader(training_set, batch_size=args.batch_size, shuffle=True)
         test_loader = torch.utils.data.DataLoader(
-            datasets.MNIST('../data', train=False, transform=transforms.Compose([
+            datasets.MNIST('./mnist_data', train=False, transform=transforms.Compose([
                        transforms.ToTensor(),
                        transforms.Normalize((0.1307,), (0.3081,))
                    ])), batch_size=args.test_batch_size, shuffle=True)

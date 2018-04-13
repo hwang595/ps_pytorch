@@ -55,26 +55,20 @@ class NN_Trainer(object):
                 data, target = Variable(data), Variable(y_batch)
                 self.optimizer.zero_grad()
                 ################# backward on normal model ############################
-                '''
+                
                 logits = self.network(data)
                 loss = self.criterion(logits, target)
-                '''
+                loss.backward()
                 #######################################################################
 
                 ################ backward on splitted model ###########################
-                logits = self.network(data)
-                logits_1 = Variable(logits.data, requires_grad=True)
-                loss = self.criterion(logits_1, target)
-                loss.backward()
-                self.network.backward_single(logits_1.grad)
+                #logits = self.network(data)
+                #logits_1 = Variable(logits.data, requires_grad=True)
+                #loss = self.criterion(logits_1, target)
+                #loss.backward()
+                #self.network.backward_single(logits_1.grad)
                 #######################################################################
                 tmp_time_0 = time.time()
-                
-                for param in self.network.parameters():
-                    # get gradient from layers here
-                    # in this version we fetch weights at once
-                    # remember to change type here, which is essential
-                    grads = param.grad.data.numpy().astype(np.float64)
 
                 duration_backward = time.time()-tmp_time_0
 
@@ -102,8 +96,6 @@ class NN_Trainer(object):
             data, target = Variable(data, volatile=True), Variable(y_batch)
             output = self.network(data)
             test_loss += F.nll_loss(output, target, size_average=False).data[0] # sum up batch loss
-            #pred = output.data.max(1, keepdim=True)[1] # get the index of the max log-probability
-            #correct += pred.eq(target.data.view_as(pred)).cpu().sum()
             prec1_tmp, prec5_tmp = accuracy(output.data, y_batch, topk=(1, 5))
             prec1_counter_ += prec1_tmp.numpy()[0]
             prec5_counter_ += prec5_tmp.numpy()[0]
