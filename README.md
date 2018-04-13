@@ -7,12 +7,12 @@ implement [parameter server](https://www.cs.cmu.edu/~muli/file/parameter_server_
 3. [Basic usages](#basic-usages)
 4. [How to prepare datasets](#prepare-datasets)
 5. [How to launch a distributed task](#job-launching)
-6. [Future works](#future-works)
+6. [Future work](#future-work)
 
 ## Motivations:
 1. PyTorch provides easy-to-use APIs with dynamic computational graph
-2. PyTorch dose not offer full distributed packages (there is some comm lib but not support operations with same flexiblity as OpenMPI)
-3. [mpi4py](https://github.com/mpi4py/mpi4py) is a good Python bindings for any distributions of MPI (e.g. OpenMPI, MPICH, and etc)
+2. PyTorch dose not offer full distributed packages (there is some communication libararies, but not support operations/APIs with the same flexiblity as OpenMPI)
+3. [mpi4py](https://github.com/mpi4py/mpi4py) provides a good Python binding for any distributions of MPI (e.g. OpenMPI, MPICH, and etc)
 
 ## System Design:
 1. parameter server node: This node serves both as master and parameter server in our system, i.e. it synchronize all workers to enter next iteration by broadcast global step to workers and also store the global model, which are keeping fetched by worker nodes at beginning of one iteration. For a user defined frequency, parameter server node will save the current model as checkpoint to shared file system (NFS in our system) for model evaluation.
@@ -28,7 +28,7 @@ Anaconda is highly recommended for installing depdencies for this project. Assum
 ```
 bash ./tools/pre_run.sh
 ```
-to install all depdencies needed.
+to install all depdencies needed. 
 ### Single Machine:
 ```
 python single_machine.py --dataset=MNIST/Cifar10 --network=LeNet/Resnet --batch-size=${BATCH_SIZE}
@@ -67,7 +67,7 @@ cfg = Cfg({
     "nfs_ip_address" : "172.31.14.225",          # us-west-2b
     "nfs_mount_point" : "/home/ubuntu/shared",       # NFS base dir
 ```
-Then, launch EC2 instances by running
+For setting everything up on EC2 cluster, the easiest way is to setup one machine and create an AMI. Then use the AMI id for `image_id` in `pytorch_ec2.py`. Then, launch EC2 instances by running
 ```
 python ./tools/pytorch_ec2.py launch
 ```
@@ -87,7 +87,7 @@ this will write ips into a file named `hosts_address`, which looks like
 172.31.30.61
 172.31.29.30
 ```
-Running the following command will copy your keyfile to the parameter server (PS) and do some basic configurations
+After generating the `hosts_address` of all EC2 instances, running the following command will copy your keyfile to the parameter server (PS) and do some basic configurations
 ```
 bash ./tool/local_script.sh ${PS_IP}
 ```
@@ -121,7 +121,7 @@ Since this project is built on MPI, tasks are required to be launched from PS (o
 | `enable-gpu`|Training on CPU/GPU, if CPU please leave this argument empty. |
 |`train-dir`|Directory to save model checkpoints for evaluation. |
 
-## Future works:
+## Future work:
 (Please note that this project is still in early alpha version)
 1. move APIs into PyTorch completely using its [built-in communication lib](http://pytorch.org/docs/master/distributed.html)
 2. optimize the speedups and minize communication overhead
