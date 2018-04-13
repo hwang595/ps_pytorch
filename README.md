@@ -1,5 +1,5 @@
 # ps_pytorch
-implement [parameter server](https://www.cs.cmu.edu/~muli/file/parameter_server_osdi14.pdf) with PyTorch and OpenMPI
+implement [parameter server](https://www.cs.cmu.edu/~muli/file/parameter_server_osdi14.pdf) (PS) with PyTorch and OpenMPI
 ## Contents
 
 1. [Motivations](#motivations)
@@ -15,8 +15,8 @@ implement [parameter server](https://www.cs.cmu.edu/~muli/file/parameter_server_
 3. [mpi4py](https://github.com/mpi4py/mpi4py) provides a good Python binding for any distributions of MPI (e.g. OpenMPI, MPICH, and etc)
 
 ## System Design:
-1. parameter server node: This node serves both as master and parameter server in our system, i.e. it synchronize all workers to enter next iteration by broadcast global step to workers and also store the global model, which are keeping fetched by worker nodes at beginning of one iteration. For a user defined frequency, parameter server node will save the current model as checkpoint to shared file system (NFS in our system) for model evaluation.
-2. workers mainly aim at sample data points (or mini-batch) in from local dataset (we don't pass data among nodes to maintain data locality), computing gradients, and send them back to parameter server.
+1. PS node: This node serves both as master and PS in our system, i.e. it synchronize all workers to enter next iteration by broadcast global step to workers and also store the global model, which are keeping fetched by worker nodes at beginning of one iteration. For a user defined frequency, PS node will save the current model as checkpoint to shared file system (NFS in our system) for model evaluation.
+2. workers mainly aim at sample data points (or mini-batch) in from local dataset (we don't pass data among nodes to maintain data locality), computing gradients, and ship them back to PS.
 3. evaluator read the checkpoints from the shared directory, and do model evaluation. Note that: there is only testset data saved on evaluator nodes.
 4. gradient compression is implemented using high-speed compression tool [Blosc](https://github.com/Blosc/c-blosc) to mitigate communication overhead
 
@@ -30,12 +30,14 @@ bash ./tools/pre_run.sh
 ```
 to install all depdencies needed. 
 ### Single Machine:
+Altough this project focuses on implementing PS in PyTorch, we do provide single machine version to measure scalability of this implementation.
 ```
 python single_machine.py --dataset=MNIST/Cifar10 --network=LeNet/Resnet --batch-size=${BATCH_SIZE}
 ```
 ### Cluster Setup:
+For running on distributed cluster, the first thing you need do is to launch AWS EC2 instances.
 #### Launching Instances:
-The first thing you need do is to launch AWS EC2 instances. [This script](https://github.com/hwang595/ps_pytorch/tree/master/tools) helps you to launch EC2 instances automatically, but before running this script, you should follow [the instruction](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html) to setup AWS CLI on your local machine.
+[This script](https://github.com/hwang595/ps_pytorch/tree/master/tools) helps you to launch EC2 instances automatically, but before running this script, you should follow [the instruction](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html) to setup AWS CLI on your local machine.
 After that, please edit this part in `./tools/pytorch_ec2.py`
 ``` python
 cfg = Cfg({
@@ -87,24 +89,24 @@ this will write ips into a file named `hosts_address`, which looks like
 172.31.30.61
 172.31.29.30
 ```
-After generating the `hosts_address` of all EC2 instances, running the following command will copy your keyfile to the parameter server (PS) and do some basic configurations
+After generating the `hosts_address` of all EC2 instances, running the following command will copy your keyfile to the parameter server (PS) instance whose address is always the first one in `hosts_address`. `local_script.sh` will also do some basic configurations e.g. clone this git repo
 ```
 bash ./tool/local_script.sh ${PS_IP}
 ```
 #### SSH related:
-In PS setting, PS should be able to ssh to any compute node, [this part](https://github.com/hwang595/ps_pytorch/blob/master/tools/remote_script.sh#L8-L22) dose the job for you by running (after ssh to the PS)
+At this stage, you should ssh to the PS instance and all operation should happen on PS. In PS setting, PS should be able to ssh to any compute node, [this part](https://github.com/hwang595/ps_pytorch/blob/master/tools/remote_script.sh#L8-L22) dose the job for you by running (after ssh to the PS)
 ```
 bash ./tools/remote_script.sh
 ```
 
 ## Prepare Datasets
-We currently support [MNIST](http://yann.lecun.com/exdb/mnist/) and [Cifar10](https://www.cs.toronto.edu/~kriz/cifar.html) datasets. Download, split, and transform datasets by
+We currently support [MNIST](http://yann.lecun.com/exdb/mnist/) and [Cifar10](https://www.cs.toronto.edu/~kriz/cifar.html) datasets. Download, split, and transform datasets by (and `./tools/remote_script.sh` dose this for you)
 ```
 bash ./src/data_prepare.sh
 ```
 
 ## Job Launching
-Since this project is built on MPI, tasks are required to be launched from PS (or master). `run_pytorch.sh` wraps job-launching up. Commonly used options (arguments) are listed as following:
+Since this project is built on MPI, tasks are required to be launched by PS (or master) instance. `run_pytorch.sh` wraps job-launching process up. Commonly used options (arguments) are listed as following:
 
 | Argument                      | Comments                                 |
 | ----------------------------- | ---------------------------------------- |
@@ -123,7 +125,7 @@ Since this project is built on MPI, tasks are required to be launched from PS (o
 
 ## Future work:
 (Please note that this project is still in early alpha version)
-1. move APIs into PyTorch completely using its [built-in communication lib](http://pytorch.org/docs/master/distributed.html)
-2. optimize the speedups and minize communication overhead
-3. support async communication mode
-4. wrap up more state-of-art deep models and dataset
+1. Move APIs into PyTorch completely using its [built-in communication lib](http://pytorch.org/docs/master/distributed.html)
+2. Optimize the speedups and minize communication overhead
+3. Support async communication mode i.e. [Backup Worker](https://arxiv.org/pdf/1604.00981.pdf)
+4. Wrap up more state-of-art deep models and dataset
