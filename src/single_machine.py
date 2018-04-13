@@ -21,9 +21,6 @@ from torchvision import datasets, transforms
 from nn_ops import NN_Trainer, accuracy
 from data_loader_ops.my_data_loader import DataLoader
 
-from cifar10 import cifar10
-from datasets import Cifar10Dataset
-
 def add_fit_args(parser):
     """
     parser : argparse.ArgumentParser
