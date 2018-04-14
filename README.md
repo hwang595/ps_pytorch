@@ -37,7 +37,7 @@ python single_machine.py --dataset=MNIST/Cifar10 --network=LeNet/Resnet --batch-
 ### Cluster Setup:
 For running on distributed cluster, the first thing you need do is to launch AWS EC2 instances.
 #### Launching Instances:
-[This script](https://github.com/hwang595/ps_pytorch/tree/master/tools) helps you to launch EC2 instances automatically, but before running this script, you should follow [the instruction](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html) to setup AWS CLI on your local machine.
+[This script](https://github.com/hwang595/ps_pytorch/blob/master/tools/pytorch_ec2.py) helps you to launch EC2 instances automatically, but before running this script, you should follow [the instruction](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html) to setup AWS CLI on your local machine.
 After that, please edit this part in `./tools/pytorch_ec2.py`
 ``` python
 cfg = Cfg({
