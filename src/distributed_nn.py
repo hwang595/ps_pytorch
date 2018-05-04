@@ -117,15 +117,31 @@ if __name__ == "__main__":
         test_loader = torch.utils.data.DataLoader(testset, batch_size=args.test_batch_size,
                                                  shuffle=False)
 
-    kwargs_master = {'batch_size':args.batch_size, 'learning_rate':args.lr, 'max_epochs':args.epochs, 
-                'momentum':args.momentum, 'network':args.network, 'comm_method':args.comm_type, 
-                'kill_threshold': args.num_aggregate, 'timeout_threshold':args.kill_threshold, 'eval_freq':args.eval_freq, 
-                'train_dir':args.train_dir, 'max_steps':args.max_steps, 'compress_grad':args.compress_grad}
+    kwargs_master = {'batch_size':args.batch_size, 
+                'learning_rate':args.lr, 
+                'max_epochs':args.epochs, 
+                'momentum':args.momentum, 
+                'network':args.network, 
+                'comm_method':args.comm_type, 
+                'kill_threshold': args.num_aggregate, 
+                'timeout_threshold':args.kill_threshold, 
+                'eval_freq':args.eval_freq, 
+                'train_dir':args.train_dir, 
+                'max_steps':args.max_steps, 
+                'compress_grad':args.compress_grad}
 
-    kwargs_worker = {'batch_size':args.batch_size, 'learning_rate':args.lr, 'max_epochs':args.epochs, 
-                'momentum':args.momentum, 'network':args.network,'comm_method':args.comm_type, 
-                'kill_threshold':args.kill_threshold, 'eval_freq':args.eval_freq, 'train_dir':args.train_dir, 
-                'compress_grad':args.compress_grad, 'enable_gpu':args.enable_gpu}
+    kwargs_worker = {'batch_size':args.batch_size, 
+                'learning_rate':args.lr, 
+                'max_epochs':args.epochs, 
+                'momentum':args.momentum, 
+                'network':args.network,
+                'comm_method':args.comm_type, 
+                'kill_threshold':args.kill_threshold, 
+                'eval_freq':args.eval_freq, 
+                'train_dir':args.train_dir, 
+                'max_steps':args.max_steps, 
+                'compress_grad':args.compress_grad, 
+                'enable_gpu':args.enable_gpu}
 
     if rank == 0:
         master_fc_nn = SyncReplicasMaster_NN(comm=comm, **kwargs_master)

@@ -88,6 +88,7 @@ class DistributedWorker(NN_Trainer):
         self.max_epochs = kwargs['max_epochs']
         self.momentum = kwargs['momentum']
         self.lr = kwargs['learning_rate']
+        self._max_steps = kwargs['max_steps']
         self.network_config = kwargs['network']
         self.comm_type = kwargs['comm_method']
         self.kill_threshold = kwargs['kill_threshold']
@@ -132,6 +133,9 @@ class DistributedWorker(NN_Trainer):
         # start the training process
         for num_epoch in range(self.max_epochs):
             for batch_idx, (train_image_batch, train_label_batch) in enumerate(train_loader):
+                # worker exit task
+                if self.cur_step == self._max_steps:
+                    break
                 if self._enable_gpu:
                     X_batch, y_batch = Variable(train_image_batch.cuda()), Variable(train_label_batch.cuda())
                 else:

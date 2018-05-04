@@ -134,7 +134,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
         self.async_bcast_step()
 
         # fake test here:
-        for i in range(1, self._max_steps):
+        for i in range(1, self._max_steps+1):
             # switch back to training mode
             self.network.train()
             self._first_grad_received = False
