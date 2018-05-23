@@ -116,16 +116,19 @@ class SyncReplicasMaster_NN(NN_Trainer):
         self._expected_grad_to_recv = kwargs['kill_threshold']
         self._max_steps = kwargs['max_steps']
         self._compress_grad = kwargs['compress_grad']
+        self._device = kwargs['device']
 
         ############ will be deprecated soon #############################
         self._eval_batch_size = 1000
 
-    def build_model(self):
-        self.network = build_model(self.network_config)
+    def build_model(self, num_classes=10):
+        self.network = build_model(self.network_config, num_classes)
         self.optimizer = SGD(self.network.parameters(), lr=self.lr, momentum=self.momentum)
         # assign a gradient accumulator to collect gradients from workers
         self.grad_accumulator = GradientAccumulator(self.network, self.world_size-1, self._compress_grad)
         self.init_model_shapes()
+        #self.network.to(self._device)
+        self.network.to(torch.device("cpu"))
 
     def start(self):
         # the first step we need to do here is to sync fetch the inital worl_step from the parameter server
@@ -144,10 +147,8 @@ class SyncReplicasMaster_NN(NN_Trainer):
 
             self.async_bcast_step()
 
-            if self.comm_type == "Bcast":
-                self.async_bcast_layer_weights_bcast()
-            elif self.comm_type == "Async":
-                self.async_bcast_layer_weights_async()
+            # bcast weights to workers
+            self.async_bcast_layer_weights_bcast()
             
             # set the gradient fetch step and gather the request
             gradient_fetch_requests=self.async_fetch_gradient_start()
@@ -179,8 +180,6 @@ class SyncReplicasMaster_NN(NN_Trainer):
                         self.aggregate_gradient(gradient=received_grad, layer_idx=layer_index)
 
                     self.grad_accumulator.gradient_aggregate_counter[layer_index] += 1
-                    #print(self.grad_accumulator.gradient_aggregate_counter)
-                    #print('---------------------------------------------------------------------')
                 
                 enough_gradients_received = True
                 for j in self.grad_accumulator.gradient_aggregate_counter:
@@ -212,28 +211,11 @@ class SyncReplicasMaster_NN(NN_Trainer):
         for i in range(len(req_list)):
             req_list[i].wait()
 
-    def async_bcast_layer_weights_async(self):
-        # deprecated
-        request_layers = []
-        for layer_idx, layer in enumerate(self.network.parameters()):
-            request_workers = []
-            layer_to_send = layer.data.numpy().astype(np.float64)
-            for i in range(self.world_size):
-                if i != 0:
-                    req = self.comm.Isend([layer_to_send, MPI.DOUBLE], dest=i, tag=11+layer_idx)
-                    request_workers.append(req)
-
-            request_layers.append(request_workers)
-        # TODO(hwang): check to see if these `wait` calls are necessary here
-        for req_l in request_layers:
-            for req_worker in req_l:
-                req_worker.wait()
-
     def async_bcast_layer_weights_bcast(self):
         request_layers = []
         for layer_idx, layer in enumerate(self.network.parameters()):
             request_workers = []
-            layer_to_send = layer.data.numpy().astype(np.float64)
+            layer_to_send = layer.detach().numpy().astype(np.float64)
             # try to see if collective communication is better here:
             msg_send = w_compress(layer_to_send)
             self.comm.bcast(msg_send, root=0)
@@ -291,7 +273,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
             eval_image_batch, eval_label_batch = validation_loader.next_batch(batch_size=self._eval_batch_size)
             X_batch, y_batch = Variable(eval_image_batch.float()), Variable(eval_label_batch.long())
             output = self.network(X_batch)
-            prec1_tmp, prec5_tmp = accuracy(output.data, eval_label_batch.long(), topk=(1, 5))
+            prec1_tmp, prec5_tmp = accuracy(output.detach(), eval_label_batch.long(), topk=(1, 5))
             prec1_counter_ += prec1_tmp
             prec5_counter_ += prec5_tmp
             batch_counter_ += 1

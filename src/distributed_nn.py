@@ -14,8 +14,6 @@ from torch.autograd import Variable
 from torch import nn
 import torch.nn.functional as F
 
-from torchvision import datasets, transforms
-
 from nn_ops import NN_Trainer, accuracy
 from data_loader_ops.my_data_loader import DataLoader
 
@@ -77,45 +75,9 @@ if __name__ == "__main__":
 
     args = add_fit_args(argparse.ArgumentParser(description='PyTorch MNIST Single Machine Test'))
 
-    # load training and test set here:
-    if args.dataset == "MNIST":
-        training_set = datasets.MNIST('./mnist_data', train=True, download=True,
-                   transform=transforms.Compose([
-                       transforms.ToTensor(),
-                       transforms.Normalize((0.1307,), (0.3081,))]))
-        train_loader = DataLoader(training_set, batch_size=args.batch_size, shuffle=True)
-        test_loader = torch.utils.data.DataLoader(
-            datasets.MNIST('./mnist_data', train=False, transform=transforms.Compose([
-                       transforms.ToTensor(),
-                       transforms.Normalize((0.1307,), (0.3081,))
-                   ])), batch_size=args.test_batch_size, shuffle=True)
-    elif args.dataset == "Cifar10":
-        normalize = transforms.Normalize(mean=[x/255.0 for x in [125.3, 123.0, 113.9]],
-                                std=[x/255.0 for x in [63.0, 62.1, 66.7]])
-        transform_train = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Lambda(lambda x: F.pad(
-                                Variable(x.unsqueeze(0), requires_grad=False, volatile=True),
-                                (4,4,4,4),mode='reflect').data.squeeze()),
-            transforms.ToPILImage(),
-            transforms.RandomCrop(32),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            normalize,
-            ])
-        # data prep for test set
-        transform_test = transforms.Compose([
-            transforms.ToTensor(),
-            normalize])
-        # load training and test set here:
-        training_set = datasets.CIFAR10(root='./cifar10_data', train=True,
-                                                download=True, transform=transform_train)
-        train_loader = torch.utils.data.DataLoader(training_set, batch_size=args.batch_size,
-                                                  shuffle=True)
-        testset = datasets.CIFAR10(root='./cifar10_data', train=False,
-                                               download=True, transform=transform_test)
-        test_loader = torch.utils.data.DataLoader(testset, batch_size=args.test_batch_size,
-                                                 shuffle=False)
+    train_loader, test_loader = prepare_date(args)
+
+    device = torch.device("cuda" if args.enable_gpu else "cpu")
 
     kwargs_master = {'batch_size':args.batch_size, 
                 'learning_rate':args.lr, 
@@ -128,7 +90,8 @@ if __name__ == "__main__":
                 'eval_freq':args.eval_freq, 
                 'train_dir':args.train_dir, 
                 'max_steps':args.max_steps, 
-                'compress_grad':args.compress_grad}
+                'compress_grad':args.compress_grad,
+                'device':device}
 
     kwargs_worker = {'batch_size':args.batch_size, 
                 'learning_rate':args.lr, 
@@ -141,17 +104,23 @@ if __name__ == "__main__":
                 'train_dir':args.train_dir, 
                 'max_steps':args.max_steps, 
                 'compress_grad':args.compress_grad, 
-                'enable_gpu':args.enable_gpu}
+                'device':device}
 
     if rank == 0:
         master_fc_nn = SyncReplicasMaster_NN(comm=comm, **kwargs_master)
-        master_fc_nn.build_model()
+        if args.dataset == 'Cifar100':
+            master_fc_nn.build_model(num_classes=100)
+        else:
+            master_fc_nn.build_model(num_classes=10)
         print("I am the master: the world size is {}, cur step: {}".format(master_fc_nn.world_size, master_fc_nn.cur_step))
         master_fc_nn.start()
         print("Done sending messages to workers!")
     else:
         worker_fc_nn = DistributedWorker(comm=comm, **kwargs_worker)
-        worker_fc_nn.build_model()
+        if args.dataset == 'Cifar100':
+            worker_fc_nn.build_model(num_classes=100)
+        else:
+            worker_fc_nn.build_model(num_classes=10)
         print("I am worker: {} in all {} workers, next step: {}".format(worker_fc_nn.rank, worker_fc_nn.world_size-1, worker_fc_nn.next_step))
         worker_fc_nn.train(train_loader=train_loader, test_loader=test_loader)
         print("Now the next step is: {}".format(worker_fc_nn.next_step))

@@ -22,15 +22,6 @@ logging.basicConfig()
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-def prepare_grad_list(params):
-    grad_list = []
-    for param_idx, param in enumerate(params):
-        # get gradient from layers here
-        # in this version we fetch weights at once
-        # remember to change type here, which is essential
-        grads = param.grad.data.numpy().astype(np.float64)
-        grad_list.append((param_idx, grads))
-    return grad_list
 
 def accuracy(output, target, topk=(1,)):
     """Computes the precision@k for the specified values of k"""
@@ -64,7 +55,6 @@ class ModelBuffer(object):
         # we temporirially deprecate the foregoing version and only update the model
         # parameters
         for param_idx, param in enumerate(network.parameters()):
-            #self.recv_buf.append(np.zeros(param.size()))
             _shape = param.size()
             if len(_shape) == 1:
                 self.recv_buf.append(bytearray(getsizeof(np.zeros((_shape[0]*2,)))))
@@ -96,21 +86,20 @@ class DistributedWorker(NN_Trainer):
         self._eval_freq = kwargs['eval_freq']
         self._train_dir = kwargs['train_dir']
         self._compress_grad = kwargs['compress_grad']
-        self._enable_gpu = kwargs['enable_gpu']
+        self._device = kwargs['device']
 
         # this one is going to be used to avoid fetch the weights for multiple times
         self._layer_cur_step = []
 
-    def build_model(self):
-        self.network = build_model(self.network_config)
+    def build_model(self, num_classes=10):
+        self.network = build_model(self.network_config, num_classes)
         # set up optimizer
         self.optimizer = torch.optim.SGD(self.network.parameters(), lr=self.lr, momentum=self.momentum)
         self.criterion = nn.CrossEntropyLoss()
         # assign a buffer for receiving models from parameter server
         self.init_recv_buf()
 
-        if self._enable_gpu:
-            self.network.cuda()
+        self.network.to(self._device)
 
     def train(self, train_loader, test_loader):
         # the first step we need to do here is to sync fetch the inital worl_step from the parameter server
@@ -136,13 +125,9 @@ class DistributedWorker(NN_Trainer):
                 # worker exit task
                 if self.cur_step == self._max_steps:
                     break
-                if self._enable_gpu:
-                    X_batch, y_batch = Variable(train_image_batch.cuda()), Variable(train_label_batch.cuda())
-                else:
-                    X_batch, y_batch = Variable(train_image_batch), Variable(train_label_batch)
+                X_batch, y_batch = train_image_batch.to(self._device), train_label_batch.to(self._device)
                 while True:
-                    # the worker shouldn't know the current global step
-                    # except received the message from parameter server
+                    # workers shouldn't know the current global step except received the message from PS
                     self.async_fetch_step()
 
                     # the only way every worker know which step they're currently on is to check the cur step variable
@@ -181,9 +166,11 @@ class DistributedWorker(NN_Trainer):
                     comm_dur = time.time() - comm_start
 
                     # on the end of a certain iteration
-                    logger.info('Worker: {}, Step: {}, Epoch: {} [{}/{} ({:.0f}%)], Loss: {:.4f}, Time Cost: {:.4f}, FetchWeight: {:.4f}, Forward: {:.4f}, Backward: {:.4f}, Comm Cost: {:.4f}'.format(self.rank,
+                    log_format = 'Worker: {}, Step: {}, Epoch: {} [{}/{} ({:.0f}%)], Loss: {:.4f}, Time Cost: {:.4f}, FetchWeight: {:.4f}, Forward: {:.4f}, Backward: {:.4f}, Comm Cost: {:.4f}'
+                    logger.info(log_format.format(self.rank,
                             self.cur_step, num_epoch, batch_idx * self.batch_size, len(train_loader.dataset), 
-                            (100. * (batch_idx * self.batch_size) / len(train_loader.dataset)), loss.data[0], time.time()-iter_start_time, fetch_weight_duration, f_dur, b_dur, comm_dur))
+                            (100. * (batch_idx * self.batch_size) / len(train_loader.dataset)), loss.item(), 
+                            time.time()-iter_start_time, fetch_weight_duration, f_dur, b_dur, comm_dur))
                     # save model for validation in a pre-specified frequency
                     if self.cur_step%self._eval_freq == 0:
                         self._evaluate_model(test_loader)
@@ -257,10 +244,7 @@ class DistributedWorker(NN_Trainer):
                 tmp_dict={key_name: param}
             else:
                 assert param.size() == weights_to_update[model_counter_].shape
-                if self._enable_gpu:
-                    tmp_dict = {key_name: torch.from_numpy(weights_to_update[model_counter_]).cuda()}
-                else:
-                    tmp_dict = {key_name: torch.from_numpy(weights_to_update[model_counter_])}
+                tmp_dict = {key_name: torch.from_numpy(weights_to_update[model_counter_]).to(self._device)}
                 model_counter_ += 1
             new_state_dict.update(tmp_dict)
         self.network.load_state_dict(new_state_dict)
@@ -269,10 +253,10 @@ class DistributedWorker(NN_Trainer):
         req_send_check = []
         encode_time_counter_ = 0
         for p_index, p in enumerate(self.network.parameters()):
-            if self._enable_gpu:
-                grad = p.grad.cpu().data.numpy().astype(np.float64)
+            if self._device.type == "cuda":
+                grad = p.grad.to(torch.device("cpu")).detach().numpy().astype(np.float64)
             else:
-                grad = p.grad.data.numpy().astype(np.float64)
+                grad = p.grad.detach().numpy().astype(np.float64)
             # wait until grad of last layer shipped to PS
             if len(req_send_check) != 0:
                 req_send_check[-1].wait()
@@ -291,19 +275,16 @@ class DistributedWorker(NN_Trainer):
         correct = 0
         prec1_counter_ = prec5_counter_ = batch_counter_ = 0
         for data, y_batch in test_loader:
-            if self._enable_gpu:
-                data, target = Variable(data.cuda(), volatile=True), Variable(y_batch.cuda())
-            else:
-                data, target = Variable(data, volatile=True), Variable(y_batch)
-
+            data, target = data.to(self._device), y_batch.to(self._device)
+            
             output = self.network(data)
-            test_loss += F.nll_loss(output, target, size_average=False).data[0] # sum up batch loss
+            test_loss += F.nll_loss(output, target, size_average=False).item() # sum up batch loss
 
-            prec1_tmp, prec5_tmp = accuracy(output.data, y_batch, topk=(1, 5))
+            prec1_tmp, prec5_tmp = accuracy(output.detach(), y_batch, topk=(1, 5))
 
-            if self._enable_gpu:
-                prec1_counter_ += prec1_tmp.cpu().numpy()[0]
-                prec5_counter_ += prec5_tmp.cpu().numpy()[0]
+            if self._device.type == 'cuda':
+                prec1_counter_ += prec1_tmp.to(torch.device("cpu")).numpy()[0]
+                prec5_counter_ += prec5_tmp.to(torch.device("cpu")).numpy()[0]
             else:
                 prec1_counter_ += prec1_tmp.numpy()[0]
                 prec5_counter_ += prec5_tmp.numpy()[0]
