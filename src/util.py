@@ -34,7 +34,7 @@ def prepare_date(args):
         transform_train = transforms.Compose([
             transforms.ToTensor(),
             transforms.Lambda(lambda x: F.pad(
-                                Variable(x.unsqueeze(0), requires_grad=False, volatile=True),
+                                Variable(x.unsqueeze(0), requires_grad=False),
                                 (4,4,4,4),mode='reflect').data.squeeze()),
             transforms.ToPILImage(),
             transforms.RandomCrop(32),
@@ -61,7 +61,7 @@ def prepare_date(args):
         transform_train = transforms.Compose([
             transforms.ToTensor(),
             transforms.Lambda(lambda x: F.pad(
-                                Variable(x.unsqueeze(0), requires_grad=False, volatile=True),
+                                Variable(x.unsqueeze(0), requires_grad=False),
                                 (4,4,4,4),mode='reflect').data.squeeze()),
             transforms.ToPILImage(),
             transforms.RandomCrop(32),
