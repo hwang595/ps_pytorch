@@ -20,7 +20,7 @@ implement [parameter server](https://www.cs.cmu.edu/~muli/file/parameter_server_
 3. evaluator read the checkpoints from the shared directory, and do model evaluation. Note that: there is only testset data saved on evaluator nodes.
 4. gradient compression is implemented using high-speed compression tool [Blosc](https://github.com/Blosc/c-blosc) to mitigate communication overhead
 
-<div align="center"><img src="https://github.com/hwang595/ps_pytorch/blob/master/images/system_overview.jpg" height="400" width="490" ></div>
+<div align="center"><img src="https://github.com/hwang595/ps_pytorch/blob/master/images/system_overview.jpg" height="400" width="600" ></div>
 
 ## Basic Usages
 ### Dependencies:
