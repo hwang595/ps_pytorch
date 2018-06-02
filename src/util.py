@@ -15,7 +15,7 @@ def build_model(model_name, num_classes):
     elif model_name == "ResNet50":
         return ResNet50()
 
-def prepare_date(args):
+def prepare_data(args):
 	# load training and test set here:
     if args.dataset == "MNIST":
         training_set = datasets.MNIST('./mnist_data', train=True, download=True,

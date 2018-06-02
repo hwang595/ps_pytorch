@@ -173,7 +173,8 @@ class DistributedWorker(NN_Trainer):
                             time.time()-iter_start_time, fetch_weight_duration, f_dur, b_dur, comm_dur))
                     # save model for validation in a pre-specified frequency
                     if self.cur_step%self._eval_freq == 0:
-                        self._evaluate_model(test_loader)
+                        if "ResNet" in self.network_config:
+                            self._save_model(file_path=self._generate_model_path())
                     # break here to fetch data then enter fetching step loop again
                     break
 
@@ -300,7 +301,7 @@ class DistributedWorker(NN_Trainer):
 
     def _save_model(self, file_path):
         with open(file_path, "wb") as f_:
-            torch.save(self.network, f_)
+            torch.save(self.network.state_dict(), f_)
         return
 
 if __name__ == "__main__":

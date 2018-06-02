@@ -107,8 +107,8 @@ class DistributedEvaluator(NN_Trainer):
 
     def _load_model(self, file_path):
         with open(file_path, "rb") as f_:
-            self.network = torch.load(f_)
-        return self.network
+            self.network.load_state_dict(torch.load(f_))
+        #return self.network
 
     def _model_dir_generator(self, next_step_to_fetch):
         return self._model_dir+"model_step_"+str(next_step_to_fetch)

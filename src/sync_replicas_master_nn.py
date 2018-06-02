@@ -191,6 +191,9 @@ class SyncReplicasMaster_NN(NN_Trainer):
             # reset essential elements
             self.meset_grad_buffer()
             self.grad_accumulator.meset_everything()
+            if self.cur_step%self._eval_freq == 0:
+                if "ResNet" not in self.network_config:
+                    self._save_model(file_path=self._generate_model_path())
             self.cur_step += 1
 
     def init_model_shapes(self):
@@ -262,7 +265,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
 
     def _save_model(self, file_path):
         with open(file_path, "wb") as f_:
-            torch.save(self.network, f_)
+            torch.save(self.network.state_dict(), f_)
         return
 
     def _evaluate_model(self, validation_loader):

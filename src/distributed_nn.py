@@ -75,7 +75,7 @@ if __name__ == "__main__":
 
     args = add_fit_args(argparse.ArgumentParser(description='PyTorch MNIST Single Machine Test'))
 
-    train_loader, test_loader = prepare_date(args)
+    train_loader, test_loader = prepare_data(args)
 
     device = torch.device("cuda" if args.enable_gpu else "cpu")
 
