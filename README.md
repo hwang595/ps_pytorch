@@ -123,6 +123,24 @@ Since this project is built on MPI, tasks are required to be launched by PS (or 
 | `enable-gpu`|Training on CPU/GPU, if CPU please leave this argument empty. |
 |`train-dir`|Directory to save model checkpoints for evaluation. |
 
+## Model Evaluation
+[Distributed evaluator](https://github.com/hwang595/ps_pytorch/blob/master/src/distributed_evaluator.py) will fetch model checkpoints from the shared directory and evaluate model on validation set.
+To evaluate model, you can run
+```
+bash ./src/evaluate_pytorch.sh
+```
+with specified arguments.
+
+Evaluation arguments are listed as following:
+
+| Argument                      | Comments                                 |
+| ----------------------------- | ---------------------------------------- |
+| `eval-batch-size`             | Batch size (on validation set) used during model evaluation. |
+| `eval-freq`      | Frequency of iterations to evaluation the model, should be set to the same value as [run_pytorch.sh](https://github.com/hwang595/ps_pytorch/blob/master/src/run_pytorch.sh). |
+| `network`                        | Types of deep neural nets, should be set to the same value as [run_pytorch.sh](https://github.com/hwang595/ps_pytorch/blob/master/src/run_pytorch.sh). |
+| `dataset`                  | Datasets use for training, should be set to the same value as [run_pytorch.sh](https://github.com/hwang595/ps_pytorch/blob/master/src/run_pytorch.sh). |
+| `model-dir`                       | Directory to save model checkpoints for evaluation, should be set to the same value as [run_pytorch.sh](https://github.com/hwang595/ps_pytorch/blob/master/src/run_pytorch.sh). |
+
 ## Future work:
 (Please note that this project is still in early alpha version)
 1. Move APIs into PyTorch completely using its [built-in communication lib](http://pytorch.org/docs/master/distributed.html)
