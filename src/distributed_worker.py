@@ -255,9 +255,9 @@ class DistributedWorker(NN_Trainer):
         encode_time_counter_ = 0
         for p_index, p in enumerate(self.network.parameters()):
             if self._device.type == "cuda":
-                grad = p.grad.to(torch.device("cpu")).detach().numpy().astype(np.float64)
+                grad = p.grad.to(torch.device("cpu")).detach().numpy().astype(np.float32)
             else:
-                grad = p.grad.detach().numpy().astype(np.float64)
+                grad = p.grad.detach().numpy().astype(np.float32)
             # wait until grad of last layer shipped to PS
             if len(req_send_check) != 0:
                 req_send_check[-1].wait()
