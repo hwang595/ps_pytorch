@@ -125,10 +125,15 @@ if __name__ == "__main__":
                        transforms.Normalize((0.1307,), (0.3081,))
                    ])), batch_size=args.eval_batch_size, shuffle=True)
     elif args.dataset == "Cifar10":
-        test_loader = torch.utils.data.DataLoader(
-            datasets.CIFAR10('./cifar10_data', train=False, transform=transforms.Compose([
-                       transforms.ToTensor(),  transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-                   ])), batch_size=args.eval_batch_size, shuffle=True)
+        normalize = transforms.Normalize(mean=[x/255.0 for x in [125.3, 123.0, 113.9]],
+                                std=[x/255.0 for x in [63.0, 62.1, 66.7]])
+        transform_test = transforms.Compose([
+            transforms.ToTensor(),
+            normalize])
+        testset = datasets.CIFAR10(root='./cifar10_data', train=False,
+                                               download=True, transform=transform_test)
+        test_loader = torch.utils.data.DataLoader(testset, batch_size=args.eval_batch_size,
+                                                 shuffle=False)
     
     kwargs_evaluator={
                     'network':args.network,
