@@ -218,7 +218,7 @@ class SyncReplicasMaster_NN(NN_Trainer):
         request_layers = []
         for layer_idx, layer in enumerate(self.network.parameters()):
             request_workers = []
-            layer_to_send = layer.detach().numpy().astype(np.float64)
+            layer_to_send = layer.detach().numpy().astype(np.float32)
             # try to see if collective communication is better here:
             msg_send = w_compress(layer_to_send)
             self.comm.bcast(msg_send, root=0)
