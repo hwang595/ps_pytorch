@@ -1,5 +1,9 @@
 # ps_pytorch
 implement [parameter server](https://www.cs.cmu.edu/~muli/file/parameter_server_osdi14.pdf) (PS) with PyTorch and OpenMPI
+
+## Mini Update Logs:
+* Nov 18, 2018. ps_pytorch now supports both python 2.7 and python 3.6 and is moved to PyTorch 0.4.1
+
 ## Contents
 
 1. [Motivations](#motivations)
