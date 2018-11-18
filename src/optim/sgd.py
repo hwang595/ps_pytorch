@@ -2,6 +2,8 @@
 modified version of SGD optimizer
 by Hongyi Wang
 '''
+import sys
+
 import torch
 from torch.optim import Optimizer
 

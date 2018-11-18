@@ -173,8 +173,9 @@ class DistributedWorker(NN_Trainer):
                             time.time()-iter_start_time, fetch_weight_duration, f_dur, b_dur, comm_dur))
                     # save model for validation in a pre-specified frequency
                     if self.cur_step%self._eval_freq == 0:
-                        if "ResNet" in self.network_config:
+                        if "ResNet" in self.network_config or "VGG" in self.network_config:
                             self._save_model(file_path=self._generate_model_path())
+                            #self._evaluate_model(test_loader)
                     # break here to fetch data then enter fetching step loop again
                     break
 
@@ -241,7 +242,7 @@ class DistributedWorker(NN_Trainer):
         model_counter_ = 0
         for param_idx,(key_name, param) in enumerate(self.network.state_dict().items()):
             # handle the case that `running_mean` and `running_var` contained in `BatchNorm` layer
-            if "running_mean" in key_name or "running_var" in key_name:
+            if "running_mean" in key_name or "running_var" in key_name or "num_batches_tracked" in key_name:
                 tmp_dict={key_name: param}
             else:
                 assert param.size() == weights_to_update[model_counter_].shape
@@ -279,7 +280,7 @@ class DistributedWorker(NN_Trainer):
             data, target = data.to(self._device), y_batch.to(self._device)
             
             output = self.network(data)
-            test_loss += F.nll_loss(output, target, size_average=False).item() # sum up batch loss
+            test_loss += F.nll_loss(F.log_softmax(output), target, size_average=False).item() # sum up batch loss
 
             prec1_tmp, prec5_tmp = accuracy(output.detach(), y_batch, topk=(1, 5))
 
@@ -294,7 +295,8 @@ class DistributedWorker(NN_Trainer):
         prec1 = prec1_counter_ / batch_counter_
         prec5 = prec5_counter_ / batch_counter_
         test_loss /= len(test_loader.dataset)
-        logger.info('Test set: Average loss: {:.4f}, Prec@1: {} Prec@5: {}'.format(test_loss, prec1, prec5))
+        print('Test set: Step: {}, Average loss: {:.4f}, Prec@1: {} Prec@5: {}'.format(self.cur_step, 
+                                                                            test_loss, prec1, prec5))
 
     def _generate_model_path(self):
         return self._train_dir+"model_step_"+str(self.cur_step)

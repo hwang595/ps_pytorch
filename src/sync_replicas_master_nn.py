@@ -203,7 +203,8 @@ class SyncReplicasMaster_NN(NN_Trainer):
 
     def _model_update(self):
         # gradient shipped from workers are averaged and update the model
-        self._grad_aggregate_buffer = map(lambda x: x / float(self._expected_grad_to_recv), self._grad_aggregate_buffer)
+        #self._grad_aggregate_buffer = map(lambda x: x / float(self._expected_grad_to_recv), self._grad_aggregate_buffer)
+        self._grad_aggregate_buffer = [x / self._expected_grad_to_recv for x in self._grad_aggregate_buffer]
         self.optimizer.step(grads=self._grad_aggregate_buffer)        
 
     def async_bcast_step(self):
