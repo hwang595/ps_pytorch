@@ -2,6 +2,7 @@
 implement [parameter server](https://www.cs.cmu.edu/~muli/file/parameter_server_osdi14.pdf) (PS) with PyTorch and OpenMPI
 
 ## Mini Update Logs:
+* Mar 21, 2019. All functionalities written in this repo has been re-wrote in [PyTorch Communication Library](https://pytorch.org/docs/stable/distributed.html). Please check [my new GitHub repo](https://github.com/hwang595/PyTorch-parameter-server) to take a look and feel free to modify any part of it!
 * Nov 18, 2018. ps_pytorch now supports both python 2.7 and python 3.6 and is moved to PyTorch 0.4.1
 
 ## Contents
@@ -147,7 +148,7 @@ Evaluation arguments are listed as following:
 
 ## Future work:
 (Please note that this project is still in early alpha version)
-1. Move APIs into PyTorch completely using its [built-in communication lib](http://pytorch.org/docs/master/distributed.html)
+1. (Already done! Please check [this repo](https://github.com/hwang595/PyTorch-parameter-server)) Move APIs into PyTorch completely using its [built-in communication lib](http://pytorch.org/docs/master/distributed.html)
 2. Optimize the speedups and minize communication overhead
 3. Support async communication mode i.e. [Backup Worker](https://arxiv.org/pdf/1604.00981.pdf)
 4. Wrap up more state-of-art deep models and dataset
